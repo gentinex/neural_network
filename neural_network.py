@@ -55,8 +55,8 @@ class NeuralNetwork:
         return activation, activations, pre_activations
         
     def backpropagate(self, inputs, outputs, biases, weights):
-        bias_deriv = [np.zeros(bias.shape) for bias in biases]
-        weight_deriv = [np.zeros(weight.shape) for weight in weights]
+        bias_derivs = [np.zeros(bias.shape) for bias in biases]
+        weight_derivs = [np.zeros(weight.shape) for weight in weights]
         for input, output in zip(inputs, outputs):
             activation, activations, pre_activations = \
                 self.feedforward(input, biases, weights)
@@ -66,7 +66,7 @@ class NeuralNetwork:
                      for pre_activation in pre_activations \
                 ]
             cost_pre_activation_deriv = \
-                (output - activation) * pre_activation_derivs[-1]
+                (activation - output) * pre_activation_derivs[-1]
             cost_pre_activation_derivs = [cost_pre_activation_deriv] # this is 4x1
             for pre_activation_deriv, weight in \
                 reversed(zip(pre_activation_derivs[:-1], weights[1:])):
@@ -78,22 +78,58 @@ class NeuralNetwork:
                  for cost_pre_activation_deriv_b, activation_b in \
                      zip(cost_pre_activation_derivs, activations[:-1])
                 ]
-            bias_deriv = bias_deriv + cost_pre_activation_derivs
-            weight_deriv = weight_deriv + current_weight_derivs
-            
+            bias_derivs = [bias_deriv + cost_pre_activation_deriv for \
+                               bias_deriv, cost_pre_activation_deriv in \
+                               zip(bias_derivs, cost_pre_activation_derivs) \
+                          ]
+                            
+            weight_derivs = [weight_deriv + current_weight_deriv for \
+                                 weight_deriv, current_weight_deriv in \
+                                 zip(weight_derivs, current_weight_derivs) \
+                            ]
+        return bias_derivs, weight_derivs
+        
+    def cost(self, inputs, outputs, biases, weights):
+        net_cost = 0
+        for input, output in zip(inputs, outputs):
+            predicted_output, _, _ = self.feedforward(input, biases, weights)
+            net_cost += sum(0.5 * (predicted_output - output) ** 2.)
+        return net_cost
+        
+    def cost_deriv(self, inputs, outputs, biases, weights):
+        bias_derivs = [np.zeros(bias.shape) for bias in biases]
+        weight_derivs = [np.zeros(weight.shape) for weight in weights]
+        base_cost = self.cost(inputs, outputs, biases, weights)
+        increment = 1e-10
+        for i, bias in enumerate(biases):
+            for j, bias_elt in enumerate(bias):
+                biases[i][j] += increment
+                bias_derivs[i][j] = \
+                    (self.cost(inputs, outputs, biases, weights) - base_cost) / increment
+                biases[i][j] -= increment
+        for i, weight in enumerate(weights):
+            for j, weight_row in enumerate(weight):
+                for k, weight_col in enumerate(weight_row):
+                    weights[i][j][k] += increment
+                    weight_derivs[i][j][k] = \
+                        (self.cost(inputs, outputs, biases, weights) - base_cost) / increment
+                    weights[i][j][k] -= increment
+        return bias_derivs, weight_derivs
+
 if __name__ == '__main__':
+    test_inputs = [np.array([.2, .3]), np.array([.4, .7])]
+    test_outputs = [np.array([.9, .1, .2, .3]), np.array([.1, .2, .7, .4])]
+    test_biases = [np.array([.3, .4, .5]), np.array([.7, .8, .9, .10])]
+    test_weights = \
+        [np.array([[.4, .2], [.6, .3], [.9, .2]]), \
+         np.array([[.3, .5, .2], [.7, .4, .2], [.4, .6, .2], [.2, .3, .6]]) \
+        ]
     x = NeuralNetwork([2, 3, 4])
-    x.feedforward(np.array([.2, .3]), \
-                  [np.array([.3, .4, .5]), np.array([.7, .8, .9, .10])], \
-                  [np.array([[.4, .2], [.6, .3], [.9, .2]]), \
-                   np.array([[.3, .5, .2], [.7, .4, .2], [.4, .6, .2], [.2, .3, .6]])
-                  ]
-                 )
-    x.backpropagate([np.array([.2, .3]), np.array([.4, .7])],
-                    [np.array([.9, .1, .2, .3]), np.array([.1, .2, .7, .4])],
-                    [np.array([.3, .4, .5]), np.array([.7, .8, .9, .10])], \
-                    [np.array([[.4, .2], [.6, .3], [.9, .2]]), \
-                     np.array([[.3, .5, .2], [.7, .4, .2], [.4, .6, .2], [.2, .3, .6]])
-                    ]
-                   )
-    print 3
+    x.feedforward(test_inputs[0], test_biases, test_weights)
+    bias_derivs, weight_derivs = x.backpropagate(test_inputs, test_outputs, test_biases, test_weights)
+    bias_derivs2, weight_derivs2 = x.cost_deriv(test_inputs, test_outputs, test_biases, test_weights)
+    print bias_derivs
+    print bias_derivs2
+    print weight_derivs
+    print weight_derivs2
+    print 0
