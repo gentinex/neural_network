@@ -1,12 +1,16 @@
-# objectives:
-# -implement feedforward
-# -implement backpropagation
+# TODO:
+# -compare / contrast implementation to nielsen's book
+# -run on handwritten digits
+# -add regularization
 # -set up autoencoder
 # -do exercise from ufldl tutorial
 
 import math
 import numpy as np
+from numpy.random import randn, seed
 from scipy.misc import derivative
+
+EPSILON = 1e-10
 
 def sigmoid(x):
     return 1. / (1. + math.exp(-x))
@@ -28,7 +32,7 @@ class NeuralNetwork:
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
         
-    def check_inputs(self, input, biases, weights):
+    def check_input(self, input, biases, weights):
         assert len(input) == self.num_nodes_per_layer[0]
         assert len(biases) == len(self.num_nodes_per_layer) - 1
         assert len(weights) == len(self.num_nodes_per_layer) - 1
@@ -39,10 +43,10 @@ class NeuralNetwork:
                    (self.num_nodes_per_layer[i + 1], self.num_nodes_per_layer[i])
 
     def feedforward(self, input, biases, weights):
-        self.check_inputs(input, biases, weights)
+        self.check_input(input, biases, weights)
         vectorized_activation = np.vectorize(self.activation_func.eval)
         activations = []
-        activation = vectorized_activation(input)
+        activation = input
         activations.append(activation)
         pre_activations = []
         for bias, weight in zip(biases, weights):
@@ -67,7 +71,7 @@ class NeuralNetwork:
                 ]
             cost_pre_activation_deriv = \
                 (activation - output) * pre_activation_derivs[-1]
-            cost_pre_activation_derivs = [cost_pre_activation_deriv] # this is 4x1
+            cost_pre_activation_derivs = [cost_pre_activation_deriv]
             for pre_activation_deriv, weight in \
                 reversed(zip(pre_activation_derivs[:-1], weights[1:])):
                 cost_pre_activation_deriv = \
@@ -100,36 +104,64 @@ class NeuralNetwork:
         bias_derivs = [np.zeros(bias.shape) for bias in biases]
         weight_derivs = [np.zeros(weight.shape) for weight in weights]
         base_cost = self.cost(inputs, outputs, biases, weights)
-        increment = 1e-10
         for i, bias in enumerate(biases):
             for j, bias_elt in enumerate(bias):
-                biases[i][j] += increment
+                biases[i][j] += EPSILON
                 bias_derivs[i][j] = \
-                    (self.cost(inputs, outputs, biases, weights) - base_cost) / increment
-                biases[i][j] -= increment
+                    (self.cost(inputs, outputs, biases, weights) - base_cost) / EPSILON
+                biases[i][j] -= EPSILON
         for i, weight in enumerate(weights):
             for j, weight_row in enumerate(weight):
                 for k, weight_col in enumerate(weight_row):
-                    weights[i][j][k] += increment
+                    weights[i][j][k] += EPSILON
                     weight_derivs[i][j][k] = \
-                        (self.cost(inputs, outputs, biases, weights) - base_cost) / increment
-                    weights[i][j][k] -= increment
+                        (self.cost(inputs, outputs, biases, weights) - base_cost) / EPSILON
+                    weights[i][j][k] -= EPSILON
         return bias_derivs, weight_derivs
 
+    def train(self, inputs, outputs):
+        # learning rate is quite important - note e.g. that linear seems to
+        # require much smaller rates than sigmoid to properly converge
+        learning_rate = 1.
+        seed(1)
+        biases = []
+        weights = []
+        for i, num_nodes in enumerate(self.num_nodes_per_layer[1:]):
+            biases.append(randn(num_nodes))
+            weights.append(randn(num_nodes, self.num_nodes_per_layer[i]))
+        while True:
+            bias_derivs, weight_derivs = \
+                self.backpropagate(inputs, outputs, biases, weights)
+            if all(all(abs(bias_deriv_elt) < EPSILON \
+                       for bias_deriv_elt in bias_deriv) \
+                       for bias_deriv in bias_derivs) \
+               and \
+               all(all(all(abs(weight_deriv_elt) < EPSILON \
+                           for weight_deriv_elt in weight_deriv_row) \
+                           for weight_deriv_row in weight_deriv) \
+                           for weight_deriv in weight_derivs):
+                break
+            biases = [bias - learning_rate * bias_deriv for bias, bias_deriv \
+                          in zip(biases, bias_derivs) \
+                     ]
+            weights = [weight - learning_rate * weight_deriv for weight, weight_deriv \
+                          in zip(weights, weight_derivs) \
+                      ]
+        return biases, weights
+
 if __name__ == '__main__':
-    test_inputs = [np.array([.2, .3]), np.array([.4, .7])]
-    test_outputs = [np.array([.9, .1, .2, .3]), np.array([.1, .2, .7, .4])]
-    test_biases = [np.array([.3, .4, .5]), np.array([.7, .8, .9, .10])]
-    test_weights = \
-        [np.array([[.4, .2], [.6, .3], [.9, .2]]), \
-         np.array([[.3, .5, .2], [.7, .4, .2], [.4, .6, .2], [.2, .3, .6]]) \
-        ]
-    x = NeuralNetwork([2, 3, 4])
-    x.feedforward(test_inputs[0], test_biases, test_weights)
-    bias_derivs, weight_derivs = x.backpropagate(test_inputs, test_outputs, test_biases, test_weights)
-    bias_derivs2, weight_derivs2 = x.cost_deriv(test_inputs, test_outputs, test_biases, test_weights)
-    print bias_derivs
-    print bias_derivs2
-    print weight_derivs
-    print weight_derivs2
+    activation_func = sigmoid
+    x = NeuralNetwork([2, 3, 4], activation_func)
+    seed(10)
+    input_length = x.num_nodes_per_layer[0]
+    output_length = x.num_nodes_per_layer[-1]
+    test_inputs = [randn(input_length), randn(input_length)]
+    test_outputs = [map(activation_func, randn(output_length)), map(activation_func, randn(output_length))]
+    test_biases = []
+    test_weights = []
+    for i, num_nodes in enumerate(x.num_nodes_per_layer[1:]):
+        test_biases.append(randn(num_nodes))
+        test_weights.append(randn(num_nodes, x.num_nodes_per_layer[i]))
+    y = x.train(test_inputs, test_outputs)
+    print y
     print 0
