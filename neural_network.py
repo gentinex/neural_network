@@ -1,13 +1,16 @@
 # TODO:
-# -compare / contrast implementation to nielsen's book
-# -run on handwritten digits
-# -add regularization
+# -get visualizations for the ones the network does wrong
+# -add regularization and see how it performs
+# -go back to ufldl
 # -set up autoencoder
 # -do exercise from ufldl tutorial
+# -learn about svm approach
 
 import cPickle as pickle
 import datetime
 import math
+import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import numpy as np
 import numpy.random as random
 import sys
@@ -146,11 +149,18 @@ class NeuralNetwork:
                 for weight, weight_deriv in zip(self.weights, weight_derivs) \
             ]
 
-    def evaluate(self, inputs, outputs):
+    def evaluate(self, inputs, outputs, show_errors=False):
         predicted_output = \
             [np.argmax(self.feedforward(input)[0]) for input in inputs]
         actual_output = [np.argmax(output) for output in outputs]
-        comparison = [a == b for a,b in zip(predicted_output, actual_output)]
+        if show_errors:
+            for a, b, c in zip(inputs, predicted_output, actual_output):
+                if b != c:
+                    imgplot = plt.imshow(np.reshape(a, (28,28)))
+                    imgplot.set_cmap('binary')
+                    plt.title('Predicted ' + str(b) + ', actual is ' + str(c))
+                    plt.show()
+        comparison = [a == b for a, b in zip(predicted_output, actual_output)]
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
             
@@ -163,11 +173,11 @@ class NeuralNetwork:
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
         vinputs, voutputs = validation
-        pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
-        print 'Validation:', str(epoch), ':', str(pct_correct), 'correct'
+        pct_correct_validation = self.evaluate(vinputs, voutputs, True) * 100.
+        print 'Validation:', str(epoch), ':', str(pct_correct_validation), 'correct'
         tinputs, toutputs = test
         pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
-        print 'Test:', str(epoch), ':', str(pct_correct), 'correct'
+        print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
         print 'Finished at', str(datetime.datetime.now())
 
 def load_mnist():
@@ -211,11 +221,10 @@ def sample_linear_test():
     y = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
     print x.biases, x.weights
     
-def mnist_test(batch_pct):
+def mnist_test():
     training, validation, test = load_mnist()
     nn = NeuralNetwork([784, 30, 10])
-    return nn.train(training, validation, test, batch_pct, int(1. / batch_pct), 30)
+    return nn.train(training, validation, test, 0.0002, 500, 10)
     
 if __name__ == '__main__':
-    mnist_test(float(sys.argv[1]))
-    print 0
+    mnist_test()
