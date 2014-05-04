@@ -6,9 +6,11 @@
 # -do exercise from ufldl tutorial
 
 import cPickle as pickle
+import datetime
 import math
 import numpy as np
 import numpy.random as random
+import sys
 from scipy.misc import derivative
 
 EPSILON = 1e-10
@@ -34,7 +36,7 @@ class NeuralNetwork:
         self.activation_func = ActivationFunction(activation_func)
         # learning rate is quite important - note e.g. that linear seems to
         # require much smaller rates than sigmoid to properly converge
-        self.learning_rate = 0.005
+        self.learning_rate = 0.3
         random.seed(1)
         self.biases = []
         self.weights = []
@@ -67,7 +69,6 @@ class NeuralNetwork:
         for i, (input, output) in enumerate(zip(inputs, outputs)):
             activation, activations, pre_activations = \
                 self.feedforward(input)
-            print i, activation
             vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
             pre_activation_derivs = \
                 [vectorized_activation_deriv(pre_activation) \
@@ -153,12 +154,21 @@ class NeuralNetwork:
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
             
-    def train(self, inputs, outputs, batch_pct, num_per_epoch, num_epochs):
+    def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs):
+        print 'Started at', str(datetime.datetime.now())
+        inputs, outputs = training
         for epoch in xrange(num_epochs):
             for run in xrange(num_per_epoch):
                 self.gradient_descent(inputs, outputs, batch_pct)
             pct_correct = self.evaluate(inputs, outputs) * 100.
-            print "Epoch " + str(epoch) + ": " + str(pct_correct) + " correct"
+            print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
+        vinputs, voutputs = validation
+        pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
+        print 'Validation:', str(epoch), ':', str(pct_correct), 'correct'
+        tinputs, toutputs = test
+        pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
+        print 'Test:', str(epoch), ':', str(pct_correct), 'correct'
+        print 'Finished at', str(datetime.datetime.now())
 
 def load_mnist():
     def convert_to_mnist_vector(output):
@@ -189,10 +199,23 @@ def sample_test():
     for i, num_nodes in enumerate(x.num_nodes_per_layer[1:]):
         test_biases.append(random.randn(num_nodes))
         test_weights.append(random.randn(num_nodes, x.num_nodes_per_layer[i]))
-    return x.train(test_inputs, test_outputs)
+    return x.train((test_inputs, test_outputs), 1., 100, 1)
+    
+def sample_linear_test():
+    # some things to note:
+    # -it does seem like the algorithm works correctly
+    # -univariate converges relatively quickly (10k passes is more than enough)
+    # -multivariate is slower (for z=a+bx+cy, need 100k passes to get sort of close)
+    activation_func = lambda x: x
+    x = NeuralNetwork([2, 1], activation_func)
+    y = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
+    print x.biases, x.weights
+    
+def mnist_test(batch_pct):
+    training, validation, test = load_mnist()
+    nn = NeuralNetwork([784, 30, 10])
+    return nn.train(training, validation, test, batch_pct, int(1. / batch_pct), 30)
     
 if __name__ == '__main__':
-    training, validation, test = load_mnist()
-    nn = NeuralNetwork([784, 10])
-    nn.train(training[0], training[1], 1., 1, 1)
+    mnist_test(float(sys.argv[1]))
     print 0
