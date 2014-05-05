@@ -1,11 +1,10 @@
 # TODO:
-# -get visualizations for the ones the network does wrong
-# -add regularization and see how it performs
 # -go back to ufldl
 # -set up autoencoder
 # -do exercise from ufldl tutorial
 # -learn about svm approach
 
+import copy
 import cPickle as pickle
 import datetime
 import math
@@ -34,22 +33,34 @@ class ActivationFunction:
             return derivative(self.activation_func, x)
 	
 class NeuralNetwork:
-    def __init__(self, num_nodes_per_layer, activation_func=sigmoid):
+    def __init__(self, \
+                 num_nodes_per_layer, \
+                 activation_func=sigmoid, \
+                 regularization=0.\
+                ):
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
+        
+        # clearly a sweet spot for regularization..0.001 worked great, 0.01 and
+        # 0.0001 not so much
+        self.regularization = regularization
+        
         # learning rate is quite important - note e.g. that linear seems to
         # require much smaller rates than sigmoid to properly converge
         self.learning_rate = 0.3
+        
         random.seed(1)
         self.biases = []
         self.weights = []
         for i, num_nodes in enumerate(self.num_nodes_per_layer[1:]):
             self.biases.append(random.randn(num_nodes))
             self.weights.append(random.randn(num_nodes, self.num_nodes_per_layer[i]))
-        
+            
+    ''' check that input is valid '''
     def check_input(self, input):
         assert len(input) == self.num_nodes_per_layer[0]
 
+    ''' feed input forward through the network '''
     def feedforward(self, input):
         self.check_input(input)
         vectorized_activation = np.vectorize(self.activation_func.eval)
@@ -65,10 +76,13 @@ class NeuralNetwork:
             activation = vectorized_activation(pre_activation)
             activations.append(activation)
         return activation, activations, pre_activations
-        
+
+    ''' fast calculation of network derivatives with respect to weights / biases '''
     def backpropagate(self, inputs, outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
-        weight_derivs = [np.zeros(weight.shape) for weight in self.weights]
+        weight_derivs = [self.regularization * copy.deepcopy(weight) \
+                         for weight in self.weights \
+                        ]
         for i, (input, output) in enumerate(zip(inputs, outputs)):
             activation, activations, pre_activations = \
                 self.feedforward(input)
@@ -100,7 +114,8 @@ class NeuralNetwork:
                                  zip(weight_derivs, current_weight_derivs) \
                             ]
         return bias_derivs, weight_derivs
-        
+
+    ''' standard cost function - used for validating backpropagation '''
     def cost(self, inputs, outputs):
         net_cost = 0
         for input, output in zip(inputs, outputs):
@@ -108,9 +123,12 @@ class NeuralNetwork:
             net_cost += sum(0.5 * (predicted_output - output) ** 2.)
         return net_cost
         
+    ''' derivative of standard cost function - used for validating backpropagation '''
     def cost_deriv(self, inputs, outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
-        weight_derivs = [np.zeros(weight.shape) for weight in self.weights]
+        weight_derivs = [self.regularization * copy.deepcopy(weight) \
+                         for weight in self.weights \
+                        ]
         base_cost = self.cost(inputs, outputs)
         for i, bias in enumerate(self.biases):
             for j, bias_elt in enumerate(bias):
@@ -127,6 +145,7 @@ class NeuralNetwork:
                     self.weights[i][j][k] -= EPSILON
         return bias_derivs, weight_derivs
 
+    ''' gradient_descent, to find optimal weights / biases '''
     def gradient_descent(self, inputs, outputs, batch_pct = 1.):
         assert batch_pct >= 0. and batch_pct <= 1.
         num_inputs = len(inputs)
@@ -149,6 +168,7 @@ class NeuralNetwork:
                 for weight, weight_deriv in zip(self.weights, weight_derivs) \
             ]
 
+    ''' evaluate the network performance '''
     def evaluate(self, inputs, outputs, show_errors=False):
         predicted_output = \
             [np.argmax(self.feedforward(input)[0]) for input in inputs]
@@ -163,7 +183,8 @@ class NeuralNetwork:
         comparison = [a == b for a, b in zip(predicted_output, actual_output)]
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
-            
+
+    ''' calibrate weights and biases of the network with supervised learning '''
     def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs):
         print 'Started at', str(datetime.datetime.now())
         inputs, outputs = training
@@ -173,7 +194,7 @@ class NeuralNetwork:
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
         vinputs, voutputs = validation
-        pct_correct_validation = self.evaluate(vinputs, voutputs, True) * 100.
+        pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
         print 'Validation:', str(epoch), ':', str(pct_correct_validation), 'correct'
         tinputs, toutputs = test
         pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
@@ -223,7 +244,7 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    nn = NeuralNetwork([784, 30, 10])
+    nn = NeuralNetwork([784, 30, 10], regularization = 0.01)
     return nn.train(training, validation, test, 0.0002, 500, 10)
     
 if __name__ == '__main__':
