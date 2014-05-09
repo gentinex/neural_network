@@ -1,8 +1,10 @@
 # TODO:
 # -go back to ufldl
 # -set up autoencoder
-# -do exercise from ufldl tutorial
-# -learn about svm approach
+# -do sparsity exercise from ufldl tutorial
+# -set up better vectorization
+# -profile
+# -learn about svm approach to mnist
 
 import copy
 import cPickle as pickle
@@ -12,6 +14,7 @@ import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
 import numpy as np
 import numpy.random as random
+import scipy.io
 import sys
 from scipy.misc import derivative
 
@@ -36,18 +39,22 @@ class NeuralNetwork:
     def __init__(self, \
                  num_nodes_per_layer, \
                  activation_func=sigmoid, \
-                 regularization=0.\
+                 regularization=0., \
+                 sparsity=None
                 ):
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
         
-        # clearly a sweet spot for regularization..0.001 worked great, 0.01 and
-        # 0.0001 not so much
+        # clearly a sweet spot for regularization..for MNIST, 
+        # 0.001 worked great, 0.01 and 0.0001 not so much
         self.regularization = regularization
         
         # learning rate is quite important - note e.g. that linear seems to
         # require much smaller rates than sigmoid to properly converge
         self.learning_rate = 0.3
+        
+        self.sparsity = sparsity
+        self.sparsity_weight = 0.1
         
         random.seed(1)
         self.biases = []
@@ -94,10 +101,20 @@ class NeuralNetwork:
             cost_pre_activation_deriv = \
                 (activation - output) * pre_activation_derivs[-1]
             cost_pre_activation_derivs = [cost_pre_activation_deriv]
-            for pre_activation_deriv, weight in \
-                reversed(zip(pre_activation_derivs[:-1], self.weights[1:])):
+            for pre_activation_deriv, weight, activation_per_layer in \
+                reversed(zip(pre_activation_derivs[:-1], self.weights[1:], activations[1:-1])):
+                if self.sparsity != None:
+                    avg_activation = np.mean(activation_per_layer)
+                    sparsity_cost = \
+                        self.sparsity_weight \
+                        * (-self.sparsity / avg_activation \
+                           + (1 - self.sparsity) / (1 - avg_activation) \
+                          )
+                else:
+                    sparsity_cost = 0.
                 cost_pre_activation_deriv = \
-                    weight.T.dot(cost_pre_activation_deriv) * pre_activation_deriv
+                    (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost) \
+                    * pre_activation_deriv
                 cost_pre_activation_derivs.insert(0, cost_pre_activation_deriv)
             current_weight_derivs = \
                 [np.outer(cost_pre_activation_deriv_b, activation_b) \
@@ -244,8 +261,25 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    nn = NeuralNetwork([784, 30, 10], regularization = 0.01)
-    return nn.train(training, validation, test, 0.0002, 500, 10)
+    nn = NeuralNetwork([784, 30, 10], regularization=0.01, sparsity=0.2)
+    return nn.train(training, validation, test, 0.0002, 50, 10)
+
+def generate_random_image_slice(images, height, width):
+    height_images, width_images, num_images = images.shape
+    image_index = random.randint(0, num_images)
+    image_height = random.randint(0, height_images - height)
+    image_width = random.randint(0, width_images - width)
+    return np.ndarray.flatten(images[image_height:(image_height + height), \
+                                     image_width:(image_width + width), \
+                                     image_index \
+                                    ] \
+                             )
+    
+def sparse_autoencoder_test():
+    images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
+    image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
+    return 0
     
 if __name__ == '__main__':
+    #sparse_autoencoder_test()
     mnist_test()
