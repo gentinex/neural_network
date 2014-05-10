@@ -1,7 +1,7 @@
 # TODO:
-# -go back to ufldl
-# -set up autoencoder
 # -do sparsity exercise from ufldl tutorial
+# -why do we keep getting errors with full gradient descent rather than stochastic?
+#  probably has to do with learning rate magnitude relative to batch size..
 # -set up better vectorization
 # -profile
 # -learn about svm approach to mnist
@@ -54,7 +54,7 @@ class NeuralNetwork:
         self.learning_rate = 0.3
         
         self.sparsity = sparsity
-        self.sparsity_weight = 0.1
+        self.sparsity_weight = 3.
         
         random.seed(1)
         self.biases = []
@@ -201,7 +201,10 @@ class NeuralNetwork:
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
 
-    ''' calibrate weights and biases of the network with supervised learning '''
+    ''' calibrate weights and biases of the network with supervised learning and
+        stochastic gradient descent. at the end of each epoch, we run the network
+        on the full training set to determine training accuracy.
+    '''
     def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs):
         print 'Started at', str(datetime.datetime.now())
         inputs, outputs = training
@@ -210,12 +213,14 @@ class NeuralNetwork:
                 self.gradient_descent(inputs, outputs, batch_pct)
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
-        vinputs, voutputs = validation
-        pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
-        print 'Validation:', str(epoch), ':', str(pct_correct_validation), 'correct'
-        tinputs, toutputs = test
-        pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
-        print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
+        if validation:
+            vinputs, voutputs = validation
+            pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
+            print 'Validation:', str(epoch), ':', str(pct_correct_validation), 'correct'
+        if test:
+            tinputs, toutputs = test
+            pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
+            print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
         print 'Finished at', str(datetime.datetime.now())
 
 def load_mnist():
@@ -261,8 +266,8 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    nn = NeuralNetwork([784, 30, 10], regularization=0.01, sparsity=0.2)
-    return nn.train(training, validation, test, 0.0002, 50, 10)
+    mnist_network = NeuralNetwork([784, 30, 10], regularization=0.01, sparsity=0.2)
+    return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
 def generate_random_image_slice(images, height, width):
     height_images, width_images, num_images = images.shape
@@ -277,9 +282,19 @@ def generate_random_image_slice(images, height, width):
     
 def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
+    for i in xrange(images.shape[-1]):
+        image = images[:,:,i]
+        imgplot = plt.imshow(image)
+        imgplot.set_cmap('binary')
+        plt.title('')
+        plt.show()
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
-    return 0
+    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
+    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 10, 1)
+    calibrated_weights = autoencoder_network.weights
+    for weight in calibrated_weights:
+        print weight.shape
     
 if __name__ == '__main__':
-    #sparse_autoencoder_test()
-    mnist_test()
+    #mnist_test()
+    sparse_autoencoder_test()
