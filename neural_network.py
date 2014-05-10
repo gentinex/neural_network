@@ -23,6 +23,12 @@ EPSILON = 1e-10
 def sigmoid(x):
     return 1. / (1. + math.exp(-x))
 
+def display_image(image, title=''):
+    imgplot = plt.imshow(image)
+    imgplot.set_cmap('binary')
+    plt.title(title)
+    plt.show()
+
 class ActivationFunction:
     def __init__(self, activation_func):
         self.activation_func = activation_func
@@ -193,10 +199,9 @@ class NeuralNetwork:
         if show_errors:
             for a, b, c in zip(inputs, predicted_output, actual_output):
                 if b != c:
-                    imgplot = plt.imshow(np.reshape(a, (28,28)))
-                    imgplot.set_cmap('binary')
-                    plt.title('Predicted ' + str(b) + ', actual is ' + str(c))
-                    plt.show()
+                    display_image(np.reshape(a, (28, 28)), \
+                                  'Predicted ' + str(b) + ', actual is ' + str(c)
+                                 )
         comparison = [a == b for a, b in zip(predicted_output, actual_output)]
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
@@ -282,18 +287,23 @@ def generate_random_image_slice(images, height, width):
     
 def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
-    for i in xrange(images.shape[-1]):
-        image = images[:,:,i]
-        imgplot = plt.imshow(image)
-        imgplot.set_cmap('binary')
-        plt.title('')
-        plt.show()
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
     autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
     autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 10, 1)
     calibrated_weights = autoencoder_network.weights
-    for weight in calibrated_weights:
-        print weight.shape
+    final_image = np.zeros((40, 40))
+    xmin, ymin, xmax, ymax = 0, 0, 8, 8
+    for wt in calibrated_weights[0]:
+        reshaped = np.reshape(wt, (8, 8))
+        final_image[xmin:xmax, ymin:ymax] = reshaped
+        if xmax == 40:
+            xmin, xmax = 0, 8
+            ymin = ymin + 8
+            ymax = ymax + 8
+        else:
+            xmin = xmin + 8
+            xmax = xmax + 8
+    display_image(final_image)
     
 if __name__ == '__main__':
     #mnist_test()
