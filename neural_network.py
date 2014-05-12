@@ -1,5 +1,10 @@
 # TODO:
 # -do sparsity exercise from ufldl tutorial
+# -why can we not replicate what's done in ufldl:
+#  -does it matter if we don't normalize our image inputs? I thought they were
+#   always between 0 and 1?
+#  -did we implement sparsity correctly? i.e., wouldn't we need to cycle through
+#   all training examples (or the present subset) before calcing sparsity penalty? 
 # -why do we keep getting errors with full gradient descent rather than stochastic?
 #  probably has to do with learning rate magnitude relative to batch size..
 # -set up better vectorization
@@ -60,7 +65,7 @@ class NeuralNetwork:
         self.learning_rate = 0.3
         
         self.sparsity = sparsity
-        self.sparsity_weight = 3.
+        self.sparsity_weight = 0.1
         
         random.seed(1)
         self.biases = []
@@ -245,7 +250,7 @@ def load_mnist():
 def sample_test():
     activation_func = sigmoid
     x = NeuralNetwork([2, 3, 4], activation_func)
-    seed(10)
+    random.seed(10)
     input_length = x.num_nodes_per_layer[0]
     output_length = x.num_nodes_per_layer[-1]
     test_inputs = [random.randn(input_length), random.randn(input_length)]
@@ -271,7 +276,7 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    mnist_network = NeuralNetwork([784, 30, 10], regularization=0.01, sparsity=0.2)
+    mnist_network = NeuralNetwork([784, 30, 10], regularization=0.001)
     return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
 def generate_random_image_slice(images, height, width):
@@ -287,9 +292,10 @@ def generate_random_image_slice(images, height, width):
     
 def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
+    random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
-    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
-    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 10, 1)
+    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.001, sparsity=0.5)
+    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 10000, 10)
     calibrated_weights = autoencoder_network.weights
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
