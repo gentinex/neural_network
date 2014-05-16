@@ -65,7 +65,7 @@ class NeuralNetwork:
         self.learning_rate = 0.3
         
         self.sparsity = sparsity
-        self.sparsity_weight = 0.1
+        self.sparsity_weight = 3.0
         
         random.seed(1)
         self.biases = []
@@ -101,6 +101,7 @@ class NeuralNetwork:
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
                          for weight in self.weights \
                         ]
+        data_size = float(len(inputs))
         for i, (input, output) in enumerate(zip(inputs, outputs)):
             activation, activations, pre_activations = \
                 self.feedforward(input)
@@ -110,7 +111,7 @@ class NeuralNetwork:
                      for pre_activation in pre_activations \
                 ]
             cost_pre_activation_deriv = \
-                (activation - output) * pre_activation_derivs[-1]
+                (activation - output) * pre_activation_derivs[-1] / data_size
             cost_pre_activation_derivs = [cost_pre_activation_deriv]
             for pre_activation_deriv, weight, activation_per_layer in \
                 reversed(zip(pre_activation_derivs[:-1], self.weights[1:], activations[1:-1])):
@@ -125,7 +126,7 @@ class NeuralNetwork:
                     sparsity_cost = 0.
                 cost_pre_activation_deriv = \
                     (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost) \
-                    * pre_activation_deriv
+                    * pre_activation_deriv / data_size
                 cost_pre_activation_derivs.insert(0, cost_pre_activation_deriv)
             current_weight_derivs = \
                 [np.outer(cost_pre_activation_deriv_b, activation_b) \
@@ -294,8 +295,8 @@ def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
-    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.001, sparsity=0.5)
-    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 10000, 10)
+    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
+    autoencoder_network.train([image_slices, image_slices], [], [], 1., 1, 10)
     calibrated_weights = autoencoder_network.weights
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
