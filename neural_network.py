@@ -4,6 +4,7 @@
 #   always between 0 and 1?
 #  -did we implement sparsity correctly? i.e., wouldn't we need to cycle through
 #   all training examples (or the present subset) before calcing sparsity penalty? 
+# -once it's good, make sure to go back and check that mnist still works
 # -set up better vectorization
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -12,6 +13,7 @@
 import copy
 import cPickle as pickle
 import datetime
+import itertools
 import math
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
@@ -20,6 +22,7 @@ import numpy.random as random
 import scipy.io
 import sys
 from scipy.misc import derivative
+from scipy.optimize import fmin_l_bfgs_b
 
 EPSILON = 1e-10
 
@@ -48,6 +51,7 @@ class NeuralNetwork:
     def __init__(self, \
                  num_nodes_per_layer, \
                  activation_func=sigmoid, \
+                 learning_rate=0.01, \
                  regularization=0., \
                  sparsity=None
                 ):
@@ -60,7 +64,7 @@ class NeuralNetwork:
         
         # learning rate is quite important - note e.g. that linear seems to
         # require much smaller rates than sigmoid to properly converge
-        self.learning_rate = 0.01
+        self.learning_rate = learning_rate
         
         self.sparsity = sparsity
         self.sparsity_weight = 3.0
@@ -109,15 +113,15 @@ class NeuralNetwork:
         return first_pass, avg_activations
         
     ''' fast calculation of network derivatives with respect to weights / biases '''
-    def backpropagate(self, inputs, outputs):
+    def backpropagate(self, used_inputs, used_outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
         # regularization derivative
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
                          for weight in self.weights \
                         ]
-        data_size = float(len(inputs))
-        first_pass, avg_activations = self.do_first_pass(inputs)
-        for i, output in enumerate(outputs):
+        data_size = float(len(used_inputs))
+        first_pass, avg_activations = self.do_first_pass(used_inputs)
+        for i, output in enumerate(used_outputs):
             activation, activations, pre_activations = first_pass[i]
             vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
             pre_activation_derivs = \
@@ -198,9 +202,39 @@ class NeuralNetwork:
                         (self.cost(inputs, outputs) - base_cost) / EPSILON
                     self.weights[i][j][k] -= EPSILON
         return bias_derivs, weight_derivs
+        
+    ''' flatten weights and biases '''
+    def flatten_params(self, bias_list, weight_list):
+        unrolled_biases = list(itertools.chain(*bias_list))
+        unrolled_weights = list(itertools.chain(*[weight.flatten() for weight in weight_list]))
+        return np.array(unrolled_biases + unrolled_weights)
 
-    ''' gradient_descent, to find optimal weights / biases '''
-    def gradient_descent(self, inputs, outputs, batch_pct = 1.):
+    ''' unflatten weights and biases '''
+    def unflatten_params(self, unrolled):
+        start_index = 0
+        for i, bias in enumerate(self.biases):
+            bias_len = len(bias)
+            self.biases[i] = unrolled[start_index:(start_index + bias_len)]
+            start_index = start_index + bias_len
+        for i, weight in enumerate(self.weights):
+            weight_shape = weight.shape
+            weight_len = weight_shape[0] * weight_shape[1]
+            self.weights[i] = np.reshape(unrolled[start_index:(start_index + weight_len)], weight_shape)
+            start_index = start_index + weight_len
+
+    ''' cost function over a vector '''
+    def cost_unrolled(self, unrolled, used_inputs, used_outputs):
+        self.unflatten_params(unrolled)
+        return self.cost(used_inputs, used_outputs)
+
+    ''' cost derivative over a vector '''
+    def cost_deriv_unrolled(self, unrolled, used_inputs, used_outputs):
+        self.unflatten_params(unrolled)
+        bias_derivs, weight_derivs = self.backpropagate(used_inputs, used_outputs)
+        return self.flatten_params(bias_derivs, weight_derivs)
+    
+    ''' select a subset of the data for training '''
+    def select_data(self, inputs, outputs, batch_pct=1.):
         assert batch_pct >= 0. and batch_pct <= 1.
         num_inputs = len(inputs)
         num_selected = max(1, int(num_inputs * batch_pct))
@@ -211,6 +245,10 @@ class NeuralNetwork:
             used_indices = random.choice(all_indices, num_selected, False)
         used_inputs = [inputs[index] for index in used_indices]
         used_outputs = [outputs[index] for index in used_indices]
+        return used_inputs, used_outputs
+
+    ''' gradient_descent, to find optimal weights / biases '''
+    def gradient_descent(self, used_inputs, used_outputs):
         bias_derivs, weight_derivs = \
             self.backpropagate(used_inputs, used_outputs)
         self.biases = \
@@ -221,7 +259,16 @@ class NeuralNetwork:
             [weight - self.learning_rate * weight_deriv \
                 for weight, weight_deriv in zip(self.weights, weight_derivs) \
             ]
-
+    
+    def l_bfgs_b(self, used_inputs, used_outputs):
+        unrolled = self.flatten_params(self.biases, self.weights)
+        bound_cost = lambda x: self.cost_unrolled(x, used_inputs, used_outputs)
+        bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, used_inputs, used_outputs)
+        print 'optimizing...'
+        optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=400)
+        print 'finished optimizing...'
+        self.unflatten_params(optimal_unrolled)
+            
     ''' evaluate the network performance '''
     def evaluate(self, inputs, outputs, show_errors=False):
         predicted_output = \
@@ -246,7 +293,9 @@ class NeuralNetwork:
         inputs, outputs = training
         for epoch in xrange(num_epochs):
             for run in xrange(num_per_epoch):
-                self.gradient_descent(inputs, outputs, batch_pct)
+                used_inputs, used_outputs = self.select_data(inputs, outputs, batch_pct)
+                #self.gradient_descent(used_inputs, used_outputs)
+                self.l_bfgs_b(used_inputs, used_outputs)
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
         if validation:
@@ -302,7 +351,7 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    mnist_network = NeuralNetwork([784, 30, 10], regularization=0.001)
+    mnist_network = NeuralNetwork([784, 30, 10], learning_rate=0.3)
     return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
 def generate_random_image_slice(images, height, width):
@@ -320,8 +369,8 @@ def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
-    autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
-    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 1, 1)
+    autoencoder_network = NeuralNetwork([64, 25, 64], learning_rate=0.3, regularization=0.0001, sparsity=0.01)
+    autoencoder_network.train([image_slices, image_slices], [], [], 1., 1, 1)
     calibrated_weights = autoencoder_network.weights
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
