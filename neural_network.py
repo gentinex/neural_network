@@ -1,14 +1,12 @@
 # TODO:
-# -do sparsity exercise from ufldl tutorial
 # -why can we not replicate what's done in ufldl:
 #  -does it matter if we don't normalize our image inputs? I thought they were
 #   always between 0 and 1?
 #  -did we implement sparsity correctly? i.e., wouldn't we need to cycle through
 #   all training examples (or the present subset) before calcing sparsity penalty? 
-# -why do we keep getting errors with full gradient descent rather than stochastic?
-#  probably has to do with learning rate magnitude relative to batch size..
 # -set up better vectorization
-# -profile
+# -put in pre-commit hook to run numerical gradient check on simple example
+# -profile (maybe look into gpus??)
 # -learn about svm approach to mnist
 
 import copy
@@ -62,7 +60,7 @@ class NeuralNetwork:
         
         # learning rate is quite important - note e.g. that linear seems to
         # require much smaller rates than sigmoid to properly converge
-        self.learning_rate = 0.3
+        self.learning_rate = 0.01
         
         self.sparsity = sparsity
         self.sparsity_weight = 3.0
@@ -95,16 +93,32 @@ class NeuralNetwork:
             activations.append(activation)
         return activation, activations, pre_activations
 
+    ''' because sparsity calculation requires first pass through, do this as
+        a separate calc '''
+    def do_first_pass(self, inputs):
+        data_size = float(len(inputs))
+        first_pass = [self.feedforward(input) for input in inputs]
+        inner_activations = [activations[1:-1] for _, activations, _ in first_pass]
+        avg_activations = [[]] * len(inner_activations)
+        if (self.sparsity != None) and inner_activations:
+            assert len(inner_activations[0]) > 0
+            avg_activations = [np.zeros(len(activation)) for activation in inner_activations[0]]
+            for activations in inner_activations:
+                for i, activation in enumerate(activations):
+                    avg_activations[i] += activation / data_size
+        return first_pass, avg_activations
+        
     ''' fast calculation of network derivatives with respect to weights / biases '''
     def backpropagate(self, inputs, outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
+        # regularization derivative
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
                          for weight in self.weights \
                         ]
         data_size = float(len(inputs))
-        for i, (input, output) in enumerate(zip(inputs, outputs)):
-            activation, activations, pre_activations = \
-                self.feedforward(input)
+        first_pass, avg_activations = self.do_first_pass(inputs)
+        for i, output in enumerate(outputs):
+            activation, activations, pre_activations = first_pass[i]
             vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
             pre_activation_derivs = \
                 [vectorized_activation_deriv(pre_activation) \
@@ -113,20 +127,21 @@ class NeuralNetwork:
             cost_pre_activation_deriv = \
                 (activation - output) * pre_activation_derivs[-1] / data_size
             cost_pre_activation_derivs = [cost_pre_activation_deriv]
-            for pre_activation_deriv, weight, activation_per_layer in \
-                reversed(zip(pre_activation_derivs[:-1], self.weights[1:], activations[1:-1])):
+            for pre_activation_deriv, weight, avg_activation in \
+                reversed(zip(pre_activation_derivs[:-1], self.weights[1:], avg_activations)):
+                # sparsity derivative
                 if self.sparsity != None:
-                    avg_activation = np.mean(activation_per_layer)
-                    sparsity_cost = \
+                    sparsity_cost_deriv = \
                         self.sparsity_weight \
                         * (-self.sparsity / avg_activation \
                            + (1 - self.sparsity) / (1 - avg_activation) \
-                          )
+                          ) / data_size
                 else:
-                    sparsity_cost = 0.
+                    sparsity_cost_deriv = 0.
+                # standard derivative
                 cost_pre_activation_deriv = \
-                    (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost) \
-                    * pre_activation_deriv / data_size
+                    (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost_deriv) \
+                    * pre_activation_deriv
                 cost_pre_activation_derivs.insert(0, cost_pre_activation_deriv)
             current_weight_derivs = \
                 [np.outer(cost_pre_activation_deriv_b, activation_b) \
@@ -146,13 +161,23 @@ class NeuralNetwork:
 
     ''' standard cost function - used for validating backpropagation '''
     def cost(self, inputs, outputs):
-        net_cost = 0
-        for input, output in zip(inputs, outputs):
-            predicted_output, _, _ = self.feedforward(input, self.biases, self.weights)
-            net_cost += sum(0.5 * (predicted_output - output) ** 2.)
+        data_size = float(len(inputs))
+        first_pass, avg_activations = self.do_first_pass(inputs)
+        # regularization cost
+        net_cost = (self.regularization / 2.) * sum([sum(sum(weight ** 2)) for weight in self.weights])
+        # standard cost
+        for (activation, _, _), output in zip(first_pass, outputs):
+            net_cost += sum(0.5 * (activation - output) ** 2.) / data_size
+        # sparsity cost
+        if self.sparsity != None:
+            for avg_activation in avg_activations:
+                base_sparsity_penalty = \
+                    self.sparsity * np.log(self.sparsity / avg_activation) \
+                    + (1 - self.sparsity)  * np.log((1 - self.sparsity) / (1 - avg_activation))
+                net_cost += self.sparsity_weight * sum(base_sparsity_penalty)
         return net_cost
         
-    ''' derivative of standard cost function - used for validating backpropagation '''
+    ''' numerical derivative of standard cost function - used for validating backpropagation '''
     def cost_deriv(self, inputs, outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
@@ -296,7 +321,7 @@ def sparse_autoencoder_test():
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
     autoencoder_network = NeuralNetwork([64, 25, 64], regularization=0.0001, sparsity=0.01)
-    autoencoder_network.train([image_slices, image_slices], [], [], 1., 1, 10)
+    autoencoder_network.train([image_slices, image_slices], [], [], 0.001, 1, 1)
     calibrated_weights = autoencoder_network.weights
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
