@@ -204,23 +204,26 @@ class NeuralNetwork:
         return bias_derivs, weight_derivs
         
     ''' flatten weights and biases '''
-    def flatten_params(self, bias_list, weight_list):
-        unrolled_biases = list(itertools.chain(*bias_list))
+    def flatten_params(self, weight_list, bias_list):
         unrolled_weights = list(itertools.chain(*[weight.flatten() for weight in weight_list]))
-        return np.array(unrolled_biases + unrolled_weights)
+        unrolled_biases = list(itertools.chain(*bias_list))
+        return np.array(unrolled_weights + unrolled_biases)
 
     ''' unflatten weights and biases '''
-    def unflatten_params(self, unrolled):
+    def unflatten_params(self, unrolled, column_major=False):
         start_index = 0
+        for i, weight in enumerate(self.weights):
+            weight_shape = weight.shape
+            weight_len = weight_shape[0] * weight_shape[1]
+            order = 'C'
+            if column_major:
+                order = 'F'
+            self.weights[i] = np.reshape(unrolled[start_index:(start_index + weight_len)], weight_shape, order)
+            start_index = start_index + weight_len
         for i, bias in enumerate(self.biases):
             bias_len = len(bias)
             self.biases[i] = unrolled[start_index:(start_index + bias_len)]
             start_index = start_index + bias_len
-        for i, weight in enumerate(self.weights):
-            weight_shape = weight.shape
-            weight_len = weight_shape[0] * weight_shape[1]
-            self.weights[i] = np.reshape(unrolled[start_index:(start_index + weight_len)], weight_shape)
-            start_index = start_index + weight_len
 
     ''' cost function over a vector '''
     def cost_unrolled(self, unrolled, used_inputs, used_outputs):
@@ -231,7 +234,7 @@ class NeuralNetwork:
     def cost_deriv_unrolled(self, unrolled, used_inputs, used_outputs):
         self.unflatten_params(unrolled)
         bias_derivs, weight_derivs = self.backpropagate(used_inputs, used_outputs)
-        return self.flatten_params(bias_derivs, weight_derivs)
+        return self.flatten_params(weight_derivs, bias_derivs)
     
     ''' select a subset of the data for training '''
     def select_data(self, inputs, outputs, batch_pct=1.):
@@ -261,7 +264,7 @@ class NeuralNetwork:
             ]
     
     def l_bfgs_b(self, used_inputs, used_outputs):
-        unrolled = self.flatten_params(self.biases, self.weights)
+        unrolled = self.flatten_params(self.weights, self.biases)
         bound_cost = lambda x: self.cost_unrolled(x, used_inputs, used_outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, used_inputs, used_outputs)
         print 'optimizing...'
@@ -354,6 +357,7 @@ def mnist_test():
     mnist_network = NeuralNetwork([784, 30, 10], learning_rate=0.3)
     return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
+''' given a set of images, select an image at random and select a random slice of it'''
 def generate_random_image_slice(images, height, width):
     height_images, width_images, num_images = images.shape
     image_index = random.randint(0, num_images)
@@ -364,26 +368,42 @@ def generate_random_image_slice(images, height, width):
                                      image_index \
                                     ] \
                              )
-    
+
+''' normalize a set of image slices, for use in autoencoder with sigmoid
+    activation. this requires input to be between 0 and 1 because the output will
+    be within that range; additionally, to ensure that derivatives are not too
+    small and thus slowing down learning, tighten the range to 0.1 to 0.9. '''
+def normalize_image_slices(image_slices):
+    demeaned_image_slices = image_slices - np.mean(image_slices)
+    stdev_limit = 3. * np.std(demeaned_image_slices)
+    raw_normalized_image_slices = \
+        np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
+    return 0.4 * raw_normalized_image_slices + 0.5
+
 def sparse_autoencoder_test():
+    # notes:
+    # -seems like even in matlab, gradient descent performs terribly, as if it
+    #  reached a bad local extremum..why? look up ng doc on sgd vs. lbgfs
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
+    normalized_image_slices = normalize_image_slices(image_slices)
     autoencoder_network = NeuralNetwork([64, 25, 64], learning_rate=0.3, regularization=0.0001, sparsity=0.01)
-    autoencoder_network.train([image_slices, image_slices], [], [], 1., 1, 1)
-    calibrated_weights = autoencoder_network.weights
+    autoencoder_network.train([normalized_image_slices, normalized_image_slices], [], [], 1., 1, 1)
+    weight = autoencoder_network.weights[0]
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
-    for wt in calibrated_weights[0]:
-        reshaped = np.reshape(wt, (8, 8))
-        final_image[xmin:xmax, ymin:ymax] = reshaped
-        if xmax == 40:
-            xmin, xmax = 0, 8
-            ymin = ymin + 8
-            ymax = ymax + 8
-        else:
+    for wt in weight:
+        reshaped = np.reshape(wt, (8, 8), 'F')
+        max_pixel = np.max(reshaped)
+        final_image[xmin:xmax, ymin:ymax] = reshaped / max_pixel
+        if ymax == 40:
+            ymin, ymax = 0, 8
             xmin = xmin + 8
             xmax = xmax + 8
+        else:
+            ymin = ymin + 8
+            ymax = ymax + 8
     display_image(final_image)
     
 if __name__ == '__main__':
