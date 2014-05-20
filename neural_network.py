@@ -1,10 +1,11 @@
 # TODO:
 # -seems like even in matlab, gradient descent performs terribly, as if it
 #  reached a bad local extremum..why? look up ng doc on sgd vs. lbgfs
-# -does our normalization help improve performance of sgd? probably not..
 # -once all is good, make sure to go back and check that mnist still works
+#  (in particular, check what learning rate / regularization work well)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
 # -set up better vectorization
+# -does our normalization help improve performance of sgd? probably not..
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
 # -learn about svm approach to mnist
@@ -51,25 +52,22 @@ class SparsityParams:
         self.sparsity = sparsity
         self.weight = weight
 
+class LearningMethod:
+    def __init__(self, name, paramsDict={}):
+        self.name = name
+        self.paramsDict = paramsDict
+        
 class NeuralNetwork:
     def __init__(self, \
                  num_nodes_per_layer, \
                  activation_func=sigmoid, \
-                 learning_rate=0.01, \
                  regularization=0., \
                  sparsity_params=None
                 ):
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
         
-        # clearly a sweet spot for regularization..for MNIST, 
-        # 0.001 worked great, 0.01 and 0.0001 not so much
         self.regularization = regularization
-        
-        # learning rate is quite important - note e.g. that linear seems to
-        # require much smaller rates than sigmoid to properly converge
-        self.learning_rate = learning_rate
-        
         self.sparsity_params = sparsity_params
         
         random.seed(1)
@@ -254,24 +252,24 @@ class NeuralNetwork:
         return used_inputs, used_outputs
 
     ''' gradient_descent, to find optimal weights / biases '''
-    def gradient_descent(self, used_inputs, used_outputs):
+    def gradient_descent(self, used_inputs, used_outputs, learning_rate):
         bias_derivs, weight_derivs = \
             self.backpropagate(used_inputs, used_outputs)
         self.biases = \
-            [bias - self.learning_rate * bias_deriv \
+            [bias - learning_rate * bias_deriv \
                  for bias, bias_deriv in zip(self.biases, bias_derivs) \
             ]
         self.weights = \
-            [weight - self.learning_rate * weight_deriv \
+            [weight - learning_rate * weight_deriv \
                 for weight, weight_deriv in zip(self.weights, weight_derivs) \
             ]
     
-    def l_bfgs_b(self, used_inputs, used_outputs):
+    def l_bfgs_b(self, used_inputs, used_outputs, maxIter):
         unrolled = self.flatten_params(self.weights, self.biases)
         bound_cost = lambda x: self.cost_unrolled(x, used_inputs, used_outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, used_inputs, used_outputs)
         print 'optimizing...'
-        optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=400)
+        optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=maxIter)
         print 'finished optimizing...'
         self.unflatten_params(optimal_unrolled)
             
@@ -294,16 +292,24 @@ class NeuralNetwork:
         stochastic gradient descent. at the end of each epoch, we run the network
         on the full training set to determine training accuracy.
     '''
-    def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs, learning_method='SGD'):
+    def train(self, \
+              training, \
+              validation, \
+              test, \
+              batch_pct, \
+              num_per_epoch, \
+              num_epochs, \
+              learning_method=LearningMethod('SGD', {'learning_rate' : 0.1}) \
+             ):
         print 'Started at', str(datetime.datetime.now())
         inputs, outputs = training
         for epoch in xrange(num_epochs):
             for run in xrange(num_per_epoch):
                 used_inputs, used_outputs = self.select_data(inputs, outputs, batch_pct)
-                if learning_method == 'SGD':
-                    self.gradient_descent(used_inputs, used_outputs)
-                elif learning_method == 'L-BFGS-B':
-                    self.l_bfgs_b(used_inputs, used_outputs)
+                if learning_method.name == 'SGD':
+                    self.gradient_descent(used_inputs, used_outputs, learning_method.paramsDict['learning_rate'])
+                elif learning_method.name == 'L-BFGS-B':
+                    self.l_bfgs_b(used_inputs, used_outputs, learning_method.paramsDict['max_iter'])
                 else:
                     raise ValueError, 'SGD or L-BFGS-B are the only supported learning methods'
             pct_correct = self.evaluate(inputs, outputs) * 100.
@@ -361,7 +367,7 @@ def sample_linear_test():
     
 def mnist_test():
     training, validation, test = load_mnist()
-    mnist_network = NeuralNetwork([784, 30, 10], learning_rate=0.3)
+    mnist_network = NeuralNetwork([784, 30, 10])
     return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
 ''' given a set of images, select an image at random and select a random slice of it'''
@@ -394,7 +400,6 @@ def sparse_autoencoder_test():
     normalized_image_slices = normalize_image_slices(image_slices)
     autoencoder_network = \
         NeuralNetwork([64, 25, 64], \
-                      learning_rate=0.3, \
                       regularization=0.0001, \
                       sparsity_params=SparsityParams(0.01, 3.) \
                      )
@@ -404,7 +409,7 @@ def sparse_autoencoder_test():
                               1., \
                               1, \
                               1, \
-                              learning_method='L-BFGS-B', \
+                              learning_method=LearningMethod('L-BFGS-B', {'maxIter' : 400}), \
                              )
     weight = autoencoder_network.weights[0]
     final_image = np.zeros((40, 40))
