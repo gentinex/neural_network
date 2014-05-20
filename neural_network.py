@@ -1,10 +1,9 @@
 # TODO:
-# -why can we not replicate what's done in ufldl:
-#  -does it matter if we don't normalize our image inputs? I thought they were
-#   always between 0 and 1?
-#  -did we implement sparsity correctly? i.e., wouldn't we need to cycle through
-#   all training examples (or the present subset) before calcing sparsity penalty? 
-# -once it's good, make sure to go back and check that mnist still works
+# -seems like even in matlab, gradient descent performs terribly, as if it
+#  reached a bad local extremum..why? look up ng doc on sgd vs. lbgfs
+# -does our normalization help improve performance of sgd? probably not..
+# -once all is good, make sure to go back and check that mnist still works
+# -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
 # -set up better vectorization
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -46,14 +45,19 @@ class ActivationFunction:
             return sigmoid_val * (1 - sigmoid_val)
         else:
             return derivative(self.activation_func, x)
-	
+
+class SparsityParams:
+    def __init__(self, sparsity, weight):
+        self.sparsity = sparsity
+        self.weight = weight
+
 class NeuralNetwork:
     def __init__(self, \
                  num_nodes_per_layer, \
                  activation_func=sigmoid, \
                  learning_rate=0.01, \
                  regularization=0., \
-                 sparsity=None
+                 sparsity_params=None
                 ):
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
@@ -66,8 +70,7 @@ class NeuralNetwork:
         # require much smaller rates than sigmoid to properly converge
         self.learning_rate = learning_rate
         
-        self.sparsity = sparsity
-        self.sparsity_weight = 3.0
+        self.sparsity_params = sparsity_params
         
         random.seed(1)
         self.biases = []
@@ -104,7 +107,7 @@ class NeuralNetwork:
         first_pass = [self.feedforward(input) for input in inputs]
         inner_activations = [activations[1:-1] for _, activations, _ in first_pass]
         avg_activations = [[]] * len(inner_activations)
-        if (self.sparsity != None) and inner_activations:
+        if (self.sparsity_params != None) and inner_activations:
             assert len(inner_activations[0]) > 0
             avg_activations = [np.zeros(len(activation)) for activation in inner_activations[0]]
             for activations in inner_activations:
@@ -134,11 +137,11 @@ class NeuralNetwork:
             for pre_activation_deriv, weight, avg_activation in \
                 reversed(zip(pre_activation_derivs[:-1], self.weights[1:], avg_activations)):
                 # sparsity derivative
-                if self.sparsity != None:
+                if self.sparsity_params != None:
                     sparsity_cost_deriv = \
-                        self.sparsity_weight \
-                        * (-self.sparsity / avg_activation \
-                           + (1 - self.sparsity) / (1 - avg_activation) \
+                        self.sparsity_params.weight \
+                        * (-self.sparsity_params.sparsity / avg_activation \
+                           + (1 - self.sparsity_params.sparsity) / (1 - avg_activation) \
                           ) / data_size
                 else:
                     sparsity_cost_deriv = 0.
@@ -173,12 +176,12 @@ class NeuralNetwork:
         for (activation, _, _), output in zip(first_pass, outputs):
             net_cost += sum(0.5 * (activation - output) ** 2.) / data_size
         # sparsity cost
-        if self.sparsity != None:
+        if self.sparsity_params != None:
             for avg_activation in avg_activations:
                 base_sparsity_penalty = \
-                    self.sparsity * np.log(self.sparsity / avg_activation) \
-                    + (1 - self.sparsity)  * np.log((1 - self.sparsity) / (1 - avg_activation))
-                net_cost += self.sparsity_weight * sum(base_sparsity_penalty)
+                    self.sparsity_params.sparsity * np.log(self.sparsity_params.sparsity / avg_activation) \
+                    + (1 - self.sparsity_params.sparsity)  * np.log((1 - self.sparsity_params.sparsity) / (1 - avg_activation))
+                net_cost += self.sparsity_params.weight * sum(base_sparsity_penalty)
         return net_cost
         
     ''' numerical derivative of standard cost function - used for validating backpropagation '''
@@ -291,14 +294,18 @@ class NeuralNetwork:
         stochastic gradient descent. at the end of each epoch, we run the network
         on the full training set to determine training accuracy.
     '''
-    def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs):
+    def train(self, training, validation, test, batch_pct, num_per_epoch, num_epochs, learning_method='SGD'):
         print 'Started at', str(datetime.datetime.now())
         inputs, outputs = training
         for epoch in xrange(num_epochs):
             for run in xrange(num_per_epoch):
                 used_inputs, used_outputs = self.select_data(inputs, outputs, batch_pct)
-                #self.gradient_descent(used_inputs, used_outputs)
-                self.l_bfgs_b(used_inputs, used_outputs)
+                if learning_method == 'SGD':
+                    self.gradient_descent(used_inputs, used_outputs)
+                elif learning_method == 'L-BFGS-B':
+                    self.l_bfgs_b(used_inputs, used_outputs)
+                else:
+                    raise ValueError, 'SGD or L-BFGS-B are the only supported learning methods'
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
         if validation:
@@ -381,15 +388,24 @@ def normalize_image_slices(image_slices):
     return 0.4 * raw_normalized_image_slices + 0.5
 
 def sparse_autoencoder_test():
-    # notes:
-    # -seems like even in matlab, gradient descent performs terribly, as if it
-    #  reached a bad local extremum..why? look up ng doc on sgd vs. lbgfs
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
     normalized_image_slices = normalize_image_slices(image_slices)
-    autoencoder_network = NeuralNetwork([64, 25, 64], learning_rate=0.3, regularization=0.0001, sparsity=0.01)
-    autoencoder_network.train([normalized_image_slices, normalized_image_slices], [], [], 1., 1, 1)
+    autoencoder_network = \
+        NeuralNetwork([64, 25, 64], \
+                      learning_rate=0.3, \
+                      regularization=0.0001, \
+                      sparsity_params=SparsityParams(0.01, 3.) \
+                     )
+    autoencoder_network.train([normalized_image_slices, normalized_image_slices], \
+                              [], \
+                              [], \
+                              1., \
+                              1, \
+                              1, \
+                              learning_method='L-BFGS-B', \
+                             )
     weight = autoencoder_network.weights[0]
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
