@@ -3,7 +3,6 @@
 #  (in particular, check what learning rate / regularization work well)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
 # -set up better vectorization
-# -does our normalization help improve performance of sgd? probably not..
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -401,7 +400,11 @@ def normalize_image_slices(image_slices):
     algorithm, and that gradient descent seems to work terribly - not clear why.
     there is a doc from andrew ng and co. that says gradient descent performs
     worst on sparse autoencoder problems, but it generally seems to say that it
-    takes a lot longer to converge, not that it will converge to a bad value. '''
+    takes a lot longer to converge, not that it will converge to a bad value.
+    also note that you get bad results if you don't regularize, or set zero
+    weight to sparsity. however, it does seem less sensitive to the weights on
+    the sparsity cost, or the magnitude of the sparsity param itself (except if
+    the sparsity param is too small). '''
 def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
