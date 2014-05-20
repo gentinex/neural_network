@@ -238,15 +238,16 @@ class NeuralNetwork:
     ''' select a subset of the data for training '''
     def select_data(self, inputs, outputs, batch_pct=1.):
         assert batch_pct >= 0. and batch_pct <= 1.
-        num_inputs = len(inputs)
-        num_selected = max(1, int(num_inputs * batch_pct))
-        all_indices = xrange(num_inputs)
         if batch_pct == 1.:
-            used_indices = np.array(all_indices)
+            used_inputs = inputs
+            used_outputs = outputs
         else:
-            used_indices = random.choice(all_indices, num_selected, False)
-        used_inputs = [inputs[index] for index in used_indices]
-        used_outputs = [outputs[index] for index in used_indices]
+            num_inputs = len(inputs)
+            num_selected = max(1, int(num_inputs * batch_pct))
+            all_indices = xrange(num_inputs)
+            random_indices = tuple(random.choice(all_indices, num_selected, False))
+            used_inputs = inputs[random_indices, ...]
+            used_outputs = outputs[random_indices, ...]
         return used_inputs, used_outputs
 
     ''' gradient_descent, to find optimal weights / biases '''
@@ -299,7 +300,7 @@ class NeuralNetwork:
               num_epochs, \
               learning_method=LearningMethod('SGD', {'learning_rate' : 0.1}) \
              ):
-        print 'Started at', str(datetime.datetime.now())
+        print 'Training started at', str(datetime.datetime.now())
         inputs, outputs = training
         for epoch in xrange(num_epochs):
             for run in xrange(num_per_epoch):
@@ -320,7 +321,7 @@ class NeuralNetwork:
             tinputs, toutputs = test
             pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
             print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
-        print 'Finished at', str(datetime.datetime.now())
+        print 'Training finished at', str(datetime.datetime.now())
 
 def load_mnist():
     def convert_to_mnist_vector(output):
@@ -376,11 +377,11 @@ def generate_random_image_slice(images, height, width):
     image_index = random.randint(0, num_images)
     image_height = random.randint(0, height_images - height)
     image_width = random.randint(0, width_images - width)
-    return np.ndarray.flatten(images[image_height:(image_height + height), \
-                                     image_width:(image_width + width), \
-                                     image_index \
-                                    ] \
-                             )
+    return images[image_height:(image_height + height), \
+                  image_width:(image_width + width), \
+                  image_index \
+                 ].flatten()
+           
 
 ''' normalize a set of image slices, for use in autoencoder with sigmoid
     activation. this requires input to be between 0 and 1 because the output will
@@ -421,7 +422,7 @@ def sparse_autoencoder_test():
                               1., \
                               1, \
                               1, \
-                              learning_method=LearningMethod('L-BFGS-B', {'maxIter' : 400}), \
+                              learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 1}), \
                              )
     weight = autoencoder_network.weights[0]
     final_image = np.zeros((40, 40))
