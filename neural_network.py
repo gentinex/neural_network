@@ -1,11 +1,10 @@
 # TODO:
-# -seems like even in matlab, gradient descent performs terribly, as if it
-#  reached a bad local extremum..why? look up ng doc on sgd vs. lbgfs
 # -once all is good, make sure to go back and check that mnist still works
 #  (in particular, check what learning rate / regularization work well)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
 # -set up better vectorization
 # -does our normalization help improve performance of sgd? probably not..
+# -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
 # -learn about svm approach to mnist
@@ -365,6 +364,8 @@ def sample_linear_test():
     y = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
     print x.biases, x.weights
     
+''' exercise from neuralnetworksanddeeplearning.com: classify MNIST data set
+    consisting of handwritten numbers '''
 def mnist_test():
     training, validation, test = load_mnist()
     mnist_network = NeuralNetwork([784, 30, 10])
@@ -393,6 +394,14 @@ def normalize_image_slices(image_slices):
         np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
     return 0.4 * raw_normalized_image_slices + 0.5
 
+''' exercise from UFLDL tutorial: use a sparse autoencoder to come up with
+    a simplified representation of input images. a good result consists of
+    weights that represent boundaries in the images. note that for this exercise,
+    the original MATLAB implementation used L-BFGS-B as the optimization
+    algorithm, and that gradient descent seems to work terribly - not clear why.
+    there is a doc from andrew ng and co. that says gradient descent performs
+    worst on sparse autoencoder problems, but it generally seems to say that it
+    takes a lot longer to converge, not that it will converge to a bad value. '''
 def sparse_autoencoder_test():
     images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
     random.seed(100)
