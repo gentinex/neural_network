@@ -2,7 +2,7 @@
 # -once all is good, make sure to go back and check that mnist still works
 #  (in particular, check what learning rate / regularization work well)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
-# -set up better vectorization
+# -how does autoencoder compare to PCA?
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -62,6 +62,7 @@ class NeuralNetwork:
                  regularization=0., \
                  sparsity_params=None
                 ):
+        assert all(num_nodes > 0 for num_nodes in num_nodes_per_layer)
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
         
@@ -75,21 +76,21 @@ class NeuralNetwork:
             self.biases.append(random.randn(num_nodes))
             self.weights.append(random.randn(num_nodes, self.num_nodes_per_layer[i]))
             
-    ''' check that input is valid '''
-    def check_input(self, input):
-        assert len(input) == self.num_nodes_per_layer[0]
+    ''' check that inputs are valid '''
+    def check_inputs(self, inputs):
+        assert len(inputs) > 0 and inputs.shape[1] == self.num_nodes_per_layer[0]
 
     ''' feed input forward through the network '''
-    def feedforward(self, input):
-        self.check_input(input)
+    def feedforward(self, inputs):
+        self.check_inputs(inputs)
         vectorized_activation = np.vectorize(self.activation_func.eval)
         activations = []
-        activation = input
+        activation = inputs.T
         activations.append(activation)
         pre_activations = []
         for bias, weight in zip(self.biases, self.weights):
-            with_one = np.insert(activation, 0, 1.)
-            bias_and_weight = np.hstack((np.array([bias]).T, weight))
+            with_one = np.insert(activation, 0, 1., axis=0)
+            bias_and_weight = np.insert(weight, 0, bias, axis=1)
             pre_activation = bias_and_weight.dot(with_one)
             pre_activations.append(pre_activation)
             activation = vectorized_activation(pre_activation)
@@ -100,15 +101,14 @@ class NeuralNetwork:
         a separate calc '''
     def do_first_pass(self, inputs):
         data_size = float(len(inputs))
-        first_pass = [self.feedforward(input) for input in inputs]
-        inner_activations = [activations[1:-1] for _, activations, _ in first_pass]
+        first_pass = self.feedforward(inputs)
+        _, activations, _ = first_pass
+        inner_activations = activations[1:-1]
         avg_activations = [[]] * len(inner_activations)
         if (self.sparsity_params != None) and inner_activations:
-            assert len(inner_activations[0]) > 0
-            avg_activations = [np.zeros(len(activation)) for activation in inner_activations[0]]
-            for activations in inner_activations:
-                for i, activation in enumerate(activations):
-                    avg_activations[i] += activation / data_size
+            avg_activations = [np.mean(inner_activation, 1) \
+                               for inner_activation in inner_activations \
+                              ]
         return first_pass, avg_activations
         
     ''' fast calculation of network derivatives with respect to weights / biases '''
@@ -119,58 +119,54 @@ class NeuralNetwork:
                          for weight in self.weights \
                         ]
         data_size = float(len(used_inputs))
-        first_pass, avg_activations = self.do_first_pass(used_inputs)
-        for i, output in enumerate(used_outputs):
-            activation, activations, pre_activations = first_pass[i]
-            vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
-            pre_activation_derivs = \
-                [vectorized_activation_deriv(pre_activation) \
-                     for pre_activation in pre_activations \
-                ]
+        (activation, activations, pre_activations), avg_activations = \
+            self.do_first_pass(used_inputs)
+        vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
+        pre_activation_derivs = \
+            [vectorized_activation_deriv(pre_activation) \
+                 for pre_activation in pre_activations \
+            ]
+        cost_pre_activation_deriv = \
+            (activation - used_outputs.T) * pre_activation_derivs[-1] / data_size
+        cost_pre_activation_derivs = [cost_pre_activation_deriv]
+        
+        for pre_activation_deriv, weight, avg_activation in \
+            reversed(zip(pre_activation_derivs[:-1], self.weights[1:], avg_activations)):
+            # sparsity derivative
+            if self.sparsity_params != None:
+                sparsity_cost_deriv = \
+                    self.sparsity_params.weight \
+                    * (-self.sparsity_params.sparsity / avg_activation \
+                       + (1 - self.sparsity_params.sparsity) / (1 - avg_activation) \
+                      ) / data_size
+            else:
+                sparsity_cost_deriv = 0.
+            # standard derivative
             cost_pre_activation_deriv = \
-                (activation - output) * pre_activation_derivs[-1] / data_size
-            cost_pre_activation_derivs = [cost_pre_activation_deriv]
-            for pre_activation_deriv, weight, avg_activation in \
-                reversed(zip(pre_activation_derivs[:-1], self.weights[1:], avg_activations)):
-                # sparsity derivative
-                if self.sparsity_params != None:
-                    sparsity_cost_deriv = \
-                        self.sparsity_params.weight \
-                        * (-self.sparsity_params.sparsity / avg_activation \
-                           + (1 - self.sparsity_params.sparsity) / (1 - avg_activation) \
-                          ) / data_size
-                else:
-                    sparsity_cost_deriv = 0.
-                # standard derivative
-                cost_pre_activation_deriv = \
-                    (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost_deriv) \
-                    * pre_activation_deriv
-                cost_pre_activation_derivs.insert(0, cost_pre_activation_deriv)
-            current_weight_derivs = \
-                [np.outer(cost_pre_activation_deriv_b, activation_b) \
-                 for cost_pre_activation_deriv_b, activation_b in \
-                     zip(cost_pre_activation_derivs, activations[:-1])
-                ]
-            bias_derivs = [bias_deriv + cost_pre_activation_deriv for \
-                               bias_deriv, cost_pre_activation_deriv in \
-                               zip(bias_derivs, cost_pre_activation_derivs) \
-                          ]
-                            
-            weight_derivs = [weight_deriv + current_weight_deriv for \
-                                 weight_deriv, current_weight_deriv in \
-                                 zip(weight_derivs, current_weight_derivs) \
-                            ]
+                (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost_deriv.reshape(-1, 1)) \
+                * pre_activation_deriv
+            cost_pre_activation_derivs.insert(0, cost_pre_activation_deriv)
+
+        bias_derivs = \
+            [np.sum(cost_pre_activation_deriv, 1) \
+             for cost_pre_activation_deriv in cost_pre_activation_derivs \
+            ]
+        weight_derivs = \
+            [self.regularization * weight \
+             + cost_pre_activation_deriv.dot(activation_b.T) \
+             for weight, cost_pre_activation_deriv, activation_b \
+                 in zip(self.weights, cost_pre_activation_derivs, activations[:-1])\
+            ]
         return bias_derivs, weight_derivs
 
     ''' standard cost function - used for validating backpropagation '''
     def cost(self, inputs, outputs):
         data_size = float(len(inputs))
-        first_pass, avg_activations = self.do_first_pass(inputs)
+        (activation, _, _), avg_activations = self.do_first_pass(inputs)
         # regularization cost
-        net_cost = (self.regularization / 2.) * sum([sum(sum(weight ** 2)) for weight in self.weights])
+        net_cost = (self.regularization / 2.) * sum(np.sum(weight ** 2.) for weight in self.weights)
         # standard cost
-        for (activation, _, _), output in zip(first_pass, outputs):
-            net_cost += sum(0.5 * (activation - output) ** 2.) / data_size
+        net_cost += np.sum((activation - outputs.T) ** 2.) * 0.5 / data_size
         # sparsity cost
         if self.sparsity_params != None:
             for avg_activation in avg_activations:
@@ -267,23 +263,20 @@ class NeuralNetwork:
         unrolled = self.flatten_params(self.weights, self.biases)
         bound_cost = lambda x: self.cost_unrolled(x, used_inputs, used_outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, used_inputs, used_outputs)
-        print 'optimizing...'
         optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=maxIter)
-        print 'finished optimizing...'
         self.unflatten_params(optimal_unrolled)
             
     ''' evaluate the network performance '''
     def evaluate(self, inputs, outputs, show_errors=False):
-        predicted_output = \
-            [np.argmax(self.feedforward(input)[0]) for input in inputs]
-        actual_output = [np.argmax(output) for output in outputs]
+        predicted_outputs = self.feedforward(inputs)[0].argmax(0)
+        actual_outputs = outputs.argmax(1)
         if show_errors:
-            for a, b, c in zip(inputs, predicted_output, actual_output):
+            for a, b, c in zip(inputs, predicted_outputs, actual_outputs):
                 if b != c:
                     display_image(np.reshape(a, (28, 28)), \
                                   'Predicted ' + str(b) + ', actual is ' + str(c)
                                  )
-        comparison = [a == b for a, b in zip(predicted_output, actual_output)]
+        comparison = [a == b for a, b in zip(predicted_outputs, actual_outputs)]
         num_correct = len(list(x for x in comparison if x))
         return float(num_correct) / float(len(inputs))
 
@@ -417,13 +410,13 @@ def sparse_autoencoder_test():
                       sparsity_params=SparsityParams(0.01, 3.) \
                      )
     autoencoder_network.train([normalized_image_slices, normalized_image_slices], \
-                              [], \
-                              [], \
-                              1., \
-                              1, \
-                              1, \
-                              learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 1}), \
-                             )
+                            [], \
+                            [], \
+                            1., \
+                            1, \
+                            1, \
+                            learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}), \
+                           )
     weight = autoencoder_network.weights[0]
     final_image = np.zeros((40, 40))
     xmin, ymin, xmax, ymax = 0, 0, 8, 8
