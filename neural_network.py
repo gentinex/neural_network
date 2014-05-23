@@ -105,9 +105,13 @@ class NeuralNetwork:
         _, activations, _ = first_pass
         inner_activations = activations[1:-1]
         avg_activations = [[]] * len(inner_activations)
-        if (self.sparsity_params != None) and inner_activations:
+        if self.sparsity_params != None:
             avg_activations = [np.mean(inner_activation, 1) \
                                for inner_activation in inner_activations \
+                              ]
+        else:
+            avg_activations = [np.zeros(inner_activation.shape[0]) \
+                               for inner_activation in inner_activations
                               ]
         return first_pass, avg_activations
         
@@ -140,7 +144,7 @@ class NeuralNetwork:
                        + (1 - self.sparsity_params.sparsity) / (1 - avg_activation) \
                       ) / data_size
             else:
-                sparsity_cost_deriv = 0.
+                sparsity_cost_deriv = np.zeros(avg_activation.shape)
             # standard derivative
             cost_pre_activation_deriv = \
                 (weight.T.dot(cost_pre_activation_deriv) + sparsity_cost_deriv.reshape(-1, 1)) \
@@ -326,7 +330,7 @@ def load_mnist():
     new_data_sets = [[data[0], data[1]] for data in [training, validation, test]]
     for data in new_data_sets:
         outputs = data[1]
-        vector_outputs = [convert_to_mnist_vector(output) for output in outputs]
+        vector_outputs = np.array([convert_to_mnist_vector(output) for output in outputs])
         data[1] = vector_outputs
     return new_data_sets[0], new_data_sets[1], new_data_sets[2]
 
@@ -434,5 +438,5 @@ def sparse_autoencoder_test():
     display_image(final_image)
     
 if __name__ == '__main__':
-    #mnist_test()
-    sparse_autoencoder_test()
+    mnist_test()
+    #sparse_autoencoder_test()
