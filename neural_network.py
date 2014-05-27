@@ -1,8 +1,8 @@
 # TODO:
-# -once all is good, make sure to go back and check that mnist still works
-#  (in particular, check what learning rate / regularization work well)
+# -determine what needs to be adjusted to get mnist working well again (at home,
+#  since laptop is too slow)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
-# -how does autoencoder compare to PCA?
+# -how does autoencoder compare to PCA? postpone this until we get to the PCA section
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -404,7 +404,7 @@ def normalize_image_slices(image_slices):
     the sparsity cost, or the magnitude of the sparsity param itself (except if
     the sparsity param is too small). '''
 def sparse_autoencoder_test():
-    images = scipy.io.loadmat('../../data/SparseAutoEncoder/IMAGES.mat')['IMAGES']
+    images = scipy.io.loadmat('../neural_network_ufldl/sparseae_exercise/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
     normalized_image_slices = normalize_image_slices(image_slices)
