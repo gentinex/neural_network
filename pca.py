@@ -9,6 +9,9 @@
 
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.random as random
+import scipy.io
+from images import display_image_grid, generate_random_image_slice
 from scipy.linalg import inv, sqrtm
 from sklearn.decomposition import PCA
 
@@ -44,6 +47,14 @@ def pca_2d():
     
     #plt.axes().set_aspect('equal')
     plt.show()
+    
+def pca_exercise():
+    images = scipy.io.loadmat('../neural_network_ufldl/pca_exercise/IMAGES_RAW.mat')['IMAGESr']
+    random.seed(100)
+    image_slices = np.array([generate_random_image_slice(images, 12, 12) for i in xrange(10000)])
+    display_image_grid(image_slices[0:36], 12, 6)
+
 
 if __name__ == '__main__':
-    pca_2d()
+    #pca_2d()
+    pca_exercise()

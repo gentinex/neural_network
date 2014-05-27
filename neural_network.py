@@ -19,6 +19,7 @@ import numpy as np
 import numpy.random as random
 import scipy.io
 import sys
+from images import display_image, display_image_grid, generate_random_image_slice
 from scipy.misc import derivative
 from scipy.optimize import fmin_l_bfgs_b
 
@@ -26,12 +27,6 @@ EPSILON = 1e-10
 
 def sigmoid(x):
     return 1. / (1. + math.exp(-x))
-
-def display_image(image, title=''):
-    imgplot = plt.imshow(image)
-    imgplot.set_cmap('binary')
-    plt.title(title)
-    plt.show()
 
 class ActivationFunction:
     def __init__(self, activation_func):
@@ -368,18 +363,6 @@ def mnist_test():
     mnist_network = NeuralNetwork([784, 30, 10])
     return mnist_network.train(training, validation, test, 0.0002, 500, 10)
 
-''' given a set of images, select an image at random and select a random slice of it'''
-def generate_random_image_slice(images, height, width):
-    height_images, width_images, num_images = images.shape
-    image_index = random.randint(0, num_images)
-    image_height = random.randint(0, height_images - height)
-    image_width = random.randint(0, width_images - width)
-    return images[image_height:(image_height + height), \
-                  image_width:(image_width + width), \
-                  image_index \
-                 ].flatten()
-           
-
 ''' normalize a set of image slices, for use in autoencoder with sigmoid
     activation. this requires input to be between 0 and 1 because the output will
     be within that range; additionally, to ensure that derivatives are not too
@@ -422,20 +405,7 @@ def sparse_autoencoder_test():
                             learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}), \
                            )
     weight = autoencoder_network.weights[0]
-    final_image = np.zeros((40, 40))
-    xmin, ymin, xmax, ymax = 0, 0, 8, 8
-    for wt in weight:
-        reshaped = np.reshape(wt, (8, 8), 'F')
-        max_pixel = np.max(reshaped)
-        final_image[xmin:xmax, ymin:ymax] = reshaped / max_pixel
-        if ymax == 40:
-            ymin, ymax = 0, 8
-            xmin = xmin + 8
-            xmax = xmax + 8
-        else:
-            ymin = ymin + 8
-            ymax = ymax + 8
-    display_image(final_image)
+    display_image_grid(weight, 8, 5)
     
 if __name__ == '__main__':
     mnist_test()
