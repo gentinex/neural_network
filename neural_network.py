@@ -2,6 +2,8 @@
 # -determine what needs to be adjusted to get mnist working well again (at home,
 #  since laptop is too slow)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
+# -don't forget PCA todos
+# -vectorization exercise
 # -how does autoencoder compare to PCA? postpone this until we get to the PCA section
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
