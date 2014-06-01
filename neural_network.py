@@ -1,10 +1,7 @@
 # TODO:
-# -determine what needs to be adjusted to get mnist working well again (at home,
-#  since laptop is too slow)
 # -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
-# -don't forget PCA todos
 # -vectorization exercise
-# -how does autoencoder compare to PCA? postpone this until we get to the PCA section
+# -how does autoencoder compare to PCA?
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
@@ -363,7 +360,14 @@ def sample_linear_test():
 def mnist_test():
     training, validation, test = load_mnist()
     mnist_network = NeuralNetwork([784, 30, 10])
-    return mnist_network.train(training, validation, test, 0.0002, 500, 10)
+    return mnist_network.train(training, \
+                               validation, \
+                               test, \
+                               0.0002, \
+                               5000, \
+                               10, \
+                               learning_method=LearningMethod('SGD', {'learning_rate' : 3.0}) \
+                              )
 
 ''' normalize a set of image slices, for use in autoencoder with sigmoid
     activation. this requires input to be between 0 and 1 because the output will
