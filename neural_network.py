@@ -1,5 +1,4 @@
 # TODO:
-# -look at whether neuralnetworksanddeeplearning does any pre-processing of its data
 # -vectorization exercise
 # -how does autoencoder compare to PCA?
 # -also see how bfgs does on mnist
@@ -8,17 +7,12 @@
 # -learn about svm approach to mnist
 
 import copy
-import cPickle as pickle
 import datetime
 import itertools
 import math
-import matplotlib.pyplot as plt
-import matplotlib.image as mpimg
 import numpy as np
 import numpy.random as random
-import scipy.io
-import sys
-from images import display_image, display_image_grid, generate_random_image_slice
+from images import display_image
 from scipy.misc import derivative
 from scipy.optimize import fmin_l_bfgs_b
 
@@ -48,7 +42,7 @@ class LearningMethod:
     def __init__(self, name, paramsDict={}):
         self.name = name
         self.paramsDict = paramsDict
-        
+
 class NeuralNetwork:
     def __init__(self, \
                  num_nodes_per_layer, \
@@ -59,17 +53,17 @@ class NeuralNetwork:
         assert all(num_nodes > 0 for num_nodes in num_nodes_per_layer)
         self.num_nodes_per_layer = num_nodes_per_layer
         self.activation_func = ActivationFunction(activation_func)
-        
+
         self.regularization = regularization
         self.sparsity_params = sparsity_params
-        
+
         random.seed(1)
         self.biases = []
         self.weights = []
         for i, num_nodes in enumerate(self.num_nodes_per_layer[1:]):
             self.biases.append(random.randn(num_nodes))
             self.weights.append(random.randn(num_nodes, self.num_nodes_per_layer[i]))
-            
+
     ''' check that inputs are valid '''
     def check_inputs(self, inputs):
         assert len(inputs) > 0 and inputs.shape[1] == self.num_nodes_per_layer[0]
@@ -94,7 +88,6 @@ class NeuralNetwork:
     ''' because sparsity calculation requires first pass through, do this as
         a separate calc '''
     def do_first_pass(self, inputs):
-        data_size = float(len(inputs))
         first_pass = self.feedforward(inputs)
         _, activations, _ = first_pass
         inner_activations = activations[1:-1]
@@ -108,7 +101,7 @@ class NeuralNetwork:
                                for inner_activation in inner_activations
                               ]
         return first_pass, avg_activations
-        
+
     ''' fast calculation of network derivatives with respect to weights / biases '''
     def backpropagate(self, used_inputs, used_outputs):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
@@ -127,7 +120,7 @@ class NeuralNetwork:
         cost_pre_activation_deriv = \
             (activation - used_outputs.T) * pre_activation_derivs[-1] / data_size
         cost_pre_activation_derivs = [cost_pre_activation_deriv]
-        
+
         for pre_activation_deriv, weight, avg_activation in \
             reversed(zip(pre_activation_derivs[:-1], self.weights[1:], avg_activations)):
             # sparsity derivative
@@ -182,14 +175,14 @@ class NeuralNetwork:
                         ]
         base_cost = self.cost(inputs, outputs)
         for i, bias in enumerate(self.biases):
-            for j, bias_elt in enumerate(bias):
+            for j, _ in enumerate(bias):
                 self.biases[i][j] += EPSILON
                 bias_derivs[i][j] = \
                     (self.cost(inputs, outputs) - base_cost) / EPSILON
                 self.biases[i][j] -= EPSILON
         for i, weight in enumerate(self.weights):
             for j, weight_row in enumerate(weight):
-                for k, weight_col in enumerate(weight_row):
+                for k, _ in enumerate(weight_row):
                     self.weights[i][j][k] += EPSILON
                     weight_derivs[i][j][k] = \
                         (self.cost(inputs, outputs) - base_cost) / EPSILON
@@ -294,7 +287,7 @@ class NeuralNetwork:
         print 'Training started at', str(datetime.datetime.now())
         inputs, outputs = training
         for epoch in xrange(num_epochs):
-            for run in xrange(num_per_epoch):
+            for _ in xrange(num_per_epoch):
                 used_inputs, used_outputs = self.select_data(inputs, outputs, batch_pct)
                 if learning_method.name == 'SGD':
                     self.gradient_descent(used_inputs, used_outputs, learning_method.paramsDict['learning_rate'])
@@ -313,20 +306,6 @@ class NeuralNetwork:
             pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
             print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
         print 'Training finished at', str(datetime.datetime.now())
-
-def load_mnist():
-    def convert_to_mnist_vector(output):
-        vector_output = np.zeros(10)
-        vector_output[output] = 1.0
-        return vector_output
-    with open('../../data/mnist/mnist.pkl', 'rb') as mnist_pkl:
-        training, validation, test = pickle.load(mnist_pkl)
-    new_data_sets = [[data[0], data[1]] for data in [training, validation, test]]
-    for data in new_data_sets:
-        outputs = data[1]
-        vector_outputs = np.array([convert_to_mnist_vector(output) for output in outputs])
-        data[1] = vector_outputs
-    return new_data_sets[0], new_data_sets[1], new_data_sets[2]
 
 def sample_test():
     activation_func = sigmoid
@@ -352,67 +331,8 @@ def sample_linear_test():
     # -multivariate is slower (for z=a+bx+cy, need 100k passes to get sort of close)
     activation_func = lambda x: x
     x = NeuralNetwork([2, 1], activation_func)
-    y = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
+    _ = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
     print x.biases, x.weights
     
-''' exercise from neuralnetworksanddeeplearning.com: classify MNIST data set
-    consisting of handwritten numbers '''
-def mnist_test():
-    training, validation, test = load_mnist()
-    mnist_network = NeuralNetwork([784, 30, 10])
-    return mnist_network.train(training, \
-                               validation, \
-                               test, \
-                               0.0002, \
-                               5000, \
-                               10, \
-                               learning_method=LearningMethod('SGD', {'learning_rate' : 3.0}) \
-                              )
-
-''' normalize a set of image slices, for use in autoencoder with sigmoid
-    activation. this requires input to be between 0 and 1 because the output will
-    be within that range; additionally, to ensure that derivatives are not too
-    small and thus slowing down learning, tighten the range to 0.1 to 0.9. '''
-def normalize_image_slices(image_slices):
-    demeaned_image_slices = image_slices - np.mean(image_slices)
-    stdev_limit = 3. * np.std(demeaned_image_slices)
-    raw_normalized_image_slices = \
-        np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
-    return 0.4 * raw_normalized_image_slices + 0.5
-
-''' exercise from UFLDL tutorial: use a sparse autoencoder to come up with
-    a simplified representation of input images. a good result consists of
-    weights that represent boundaries in the images. note that for this exercise,
-    the original MATLAB implementation used L-BFGS-B as the optimization
-    algorithm, and that gradient descent seems to work terribly - not clear why.
-    there is a doc from andrew ng and co. that says gradient descent performs
-    worst on sparse autoencoder problems, but it generally seems to say that it
-    takes a lot longer to converge, not that it will converge to a bad value.
-    also note that you get bad results if you don't regularize, or set zero
-    weight to sparsity. however, it does seem less sensitive to the weights on
-    the sparsity cost, or the magnitude of the sparsity param itself (except if
-    the sparsity param is too small). '''
-def sparse_autoencoder_test():
-    images = scipy.io.loadmat('../neural_network_ufldl/sparseae_exercise/IMAGES.mat')['IMAGES']
-    random.seed(100)
-    image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
-    normalized_image_slices = normalize_image_slices(image_slices)
-    autoencoder_network = \
-        NeuralNetwork([64, 25, 64], \
-                      regularization=0.0001, \
-                      sparsity_params=SparsityParams(0.01, 3.) \
-                     )
-    autoencoder_network.train([normalized_image_slices, normalized_image_slices], \
-                            [], \
-                            [], \
-                            1., \
-                            1, \
-                            1, \
-                            learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}), \
-                           )
-    weight = autoencoder_network.weights[0]
-    display_image_grid(weight, 8, 5)
-    
 if __name__ == '__main__':
-    mnist_test()
-    #sparse_autoencoder_test()
+    sample_linear_test()
