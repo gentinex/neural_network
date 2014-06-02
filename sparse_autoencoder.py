@@ -1,19 +1,8 @@
 import numpy as np
 import numpy.random as random
 import scipy.io
-from images import display_image_grid, generate_random_image_slice
+from images import display_image_grid, generate_random_image_slice, normalize_image_slices
 from neural_network import LearningMethod, NeuralNetwork, SparsityParams
-
-''' normalize a set of image slices, for use in autoencoder with sigmoid
-    activation. this requires input to be between 0 and 1 because the output will
-    be within that range; additionally, to ensure that derivatives are not too
-    small and thus slowing down learning, tighten the range to 0.1 to 0.9. '''
-def normalize_image_slices(image_slices):
-    demeaned_image_slices = image_slices - np.mean(image_slices)
-    stdev_limit = 3. * np.std(demeaned_image_slices)
-    raw_normalized_image_slices = \
-        np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
-    return 0.4 * raw_normalized_image_slices + 0.5
 
 ''' exercise from UFLDL tutorial: use a sparse autoencoder to come up with
     a simplified representation of input images. a good result consists of
@@ -27,7 +16,7 @@ def normalize_image_slices(image_slices):
     weight to sparsity. however, it does seem less sensitive to the weights on
     the sparsity cost, or the magnitude of the sparsity param itself (except if
     the sparsity param is too small). '''
-def sparse_autoencoder_test():
+def sparse_autoencoder():
     images = scipy.io.loadmat('../neural_network_ufldl/sparseae_exercise/IMAGES.mat')['IMAGES']
     random.seed(100)
     image_slices = np.array([generate_random_image_slice(images, 8, 8) for i in xrange(10000)])
@@ -49,4 +38,4 @@ def sparse_autoencoder_test():
     display_image_grid(weight, 8, 5)
 
 if __name__ == '__main__':
-    sparse_autoencoder_test()
+    sparse_autoencoder()

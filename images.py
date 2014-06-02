@@ -18,6 +18,17 @@ def generate_random_image_slice(images, height, width):
                   image_width:(image_width + width), \
                   image_index \
                  ].flatten()
+
+''' normalize a set of image slices, for use in autoencoder with sigmoid
+    activation. this requires input to be between 0 and 1 because the output will
+    be within that range; additionally, to ensure that derivatives are not too
+    small and thus slowing down learning, tighten the range to 0.1 to 0.9. '''
+def normalize_image_slices(image_slices):
+    demeaned_image_slices = image_slices - np.mean(image_slices)
+    stdev_limit = 3. * np.std(demeaned_image_slices)
+    raw_normalized_image_slices = \
+        np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
+    return 0.4 * raw_normalized_image_slices + 0.5
                  
 def display_image_grid(images, image_size, num_images_per_row_col):
     max_index = image_size * num_images_per_row_col

@@ -18,7 +18,7 @@ def load_mnist():
     
 ''' exercise from neuralnetworksanddeeplearning.com: classify MNIST data set
     consisting of handwritten numbers '''
-def mnist_test():
+def mnist():
     training, validation, test = load_mnist()
     mnist_network = NeuralNetwork([784, 30, 10])
     return mnist_network.train(training, \
@@ -31,4 +31,4 @@ def mnist_test():
                               )
 
 if __name__ == '__main__':
-    mnist_test()
+    mnist()
