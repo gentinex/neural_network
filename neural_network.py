@@ -1,5 +1,6 @@
 # TODO:
-# -vectorization exercise
+# -vectorization exercise: why do we not normalize here, but do so in sparse_autoencoder?
+# -need to recorrect sparse autoencoder :(
 # -how does autoencoder compare to PCA?
 # -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
