@@ -38,7 +38,7 @@ def sparse_autoencoder_mnist():
                                     1., \
                                     1, \
                                     1, \
-                                    learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 1}) \
+                                    learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}) \
                                    )
     weight = autoencoder_mnist_network.weights[0]
     display_image_grid(weight, 28, 14)

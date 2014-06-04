@@ -21,6 +21,9 @@ def load_mnist():
 def mnist():
     training, validation, test = load_mnist()
     mnist_network = NeuralNetwork([784, 30, 10])
+    # we tried L-BFGS-B here with 400 max iterations,
+    # but it was inferior (slower + less accurate - 68% accuracy after one hour,
+    # compared to 91% after 10 mins for SGD
     return mnist_network.train(training, \
                                validation, \
                                test, \
