@@ -15,6 +15,7 @@ import math
 import numpy as np
 import numpy.random as random
 from images import display_image
+from learning import LearningMethod, select_data
 from scipy.misc import derivative
 from scipy.optimize import fmin_l_bfgs_b
 
@@ -39,11 +40,6 @@ class SparsityParams:
     def __init__(self, sparsity, weight):
         self.sparsity = sparsity
         self.weight = weight
-
-class LearningMethod:
-    def __init__(self, name, paramsDict={}):
-        self.name = name
-        self.paramsDict = paramsDict
 
 class NeuralNetwork:
     def __init__(self, \
@@ -223,21 +219,6 @@ class NeuralNetwork:
         self.unflatten_params(unrolled)
         bias_derivs, weight_derivs = self.backpropagate(used_inputs, used_outputs)
         return self.flatten_params(weight_derivs, bias_derivs)
-    
-    ''' select a subset of the data for training '''
-    def select_data(self, inputs, outputs, batch_pct=1.):
-        assert batch_pct >= 0. and batch_pct <= 1.
-        if batch_pct == 1.:
-            used_inputs = inputs
-            used_outputs = outputs
-        else:
-            num_inputs = len(inputs)
-            num_selected = max(1, int(num_inputs * batch_pct))
-            all_indices = xrange(num_inputs)
-            random_indices = tuple(random.choice(all_indices, num_selected, False))
-            used_inputs = inputs[random_indices, ...]
-            used_outputs = outputs[random_indices, ...]
-        return used_inputs, used_outputs
 
     ''' gradient_descent, to find optimal weights / biases '''
     def gradient_descent(self, used_inputs, used_outputs, learning_rate):
@@ -252,11 +233,11 @@ class NeuralNetwork:
                 for weight, weight_deriv in zip(self.weights, weight_derivs) \
             ]
     
-    def l_bfgs_b(self, used_inputs, used_outputs, maxIter):
+    def l_bfgs_b(self, used_inputs, used_outputs, max_iter):
         unrolled = self.flatten_params(self.weights, self.biases)
         bound_cost = lambda x: self.cost_unrolled(x, used_inputs, used_outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, used_inputs, used_outputs)
-        optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=maxIter)
+        optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=max_iter)
         self.unflatten_params(optimal_unrolled)
             
     ''' evaluate the network performance '''
@@ -290,7 +271,7 @@ class NeuralNetwork:
         inputs, outputs = training
         for epoch in xrange(num_epochs):
             for _ in xrange(num_per_epoch):
-                used_inputs, used_outputs = self.select_data(inputs, outputs, batch_pct)
+                used_inputs, used_outputs = select_data(inputs, outputs, batch_pct)
                 if learning_method.name == 'SGD':
                     self.gradient_descent(used_inputs, used_outputs, learning_method.paramsDict['learning_rate'])
                 elif learning_method.name == 'L-BFGS-B':
@@ -299,6 +280,7 @@ class NeuralNetwork:
                     raise ValueError, 'SGD or L-BFGS-B are the only supported learning methods'
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
+        print 'Training finished at', str(datetime.datetime.now())
         if validation:
             vinputs, voutputs = validation
             pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
@@ -307,7 +289,6 @@ class NeuralNetwork:
             tinputs, toutputs = test
             pct_correct_test = self.evaluate(tinputs, toutputs) * 100.
             print 'Test:', str(epoch), ':', str(pct_correct_test), 'correct'
-        print 'Training finished at', str(datetime.datetime.now())
 
 def sample_test():
     activation_func = sigmoid
@@ -333,7 +314,7 @@ def sample_linear_test():
     # -multivariate is slower (for z=a+bx+cy, need 100k passes to get sort of close)
     activation_func = lambda x: x
     x = NeuralNetwork([2, 1], activation_func)
-    _ = x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
+    x.train(([[7., 2.], [8., 1.], [4., 3.], [2., 5.]], [[4.], [2.], [2.], [1.]]), 1., 1000, 100)
     print x.biases, x.weights
     
 if __name__ == '__main__':
