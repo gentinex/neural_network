@@ -62,7 +62,6 @@ class Softmax:
         
     def train(self, \
               training, \
-              validation, \
               test, \
               batch_pct, \
               num_per_epoch, \
@@ -83,22 +82,18 @@ class Softmax:
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Training epoch', str(epoch), ':', str(pct_correct), 'correct'
         print 'Training finished at', str(datetime.datetime.now())
-        if validation:
-            pct_correct_validation = self.evaluate(validation[0], validation[1]) * 100.
-            print 'Validation:', str(pct_correct_validation), 'correct'
         if test:
             pct_correct_test = self.evaluate(test[0], test[1]) * 100.
             print 'Test:', str(pct_correct_test), 'correct'
         
 def mnist_softmax():
-    training, validation, test = load_mnist()
+    training, test = load_mnist()
     random.seed(1)
     softmax = Softmax(10, 784, regularization = 1e-4)
     # L-BFGS-B seems to train more quickly than SGD, in that in the same amount
     # of time (100 iters for L-BFGS-B vs. 150 for SGD), it has higher accuracy
     # for training / validation / test
     softmax.train(training, \
-                  validation, \
                   test, \
                   1., \
                   1, \

@@ -7,6 +7,14 @@
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
 # -learn about svm approach to mnist
+# -why does using correlated inputs slow down training time? was this covered in
+#  the coursera course?
+# -in general, as in the sparse_autoencoder* exercises, one way to visualize
+#  a network is to calculate what inputs maximally activate various neurons in
+#  the hidden layer (though as per the "intriguing properties of neural "networks"
+#  paper, this may not be a meaningful way to interpret a network)
+# -look into feature sensitivities. is it possible for feature sensitivities to
+#  change drastically depending on the values of other features?
 
 import copy
 import datetime
@@ -67,14 +75,18 @@ class NeuralNetwork:
         assert len(inputs) > 0 and inputs.shape[1] == self.num_nodes_per_layer[0]
 
     ''' feed input forward through the network '''
-    def feedforward(self, inputs):
+    def feedforward(self, inputs, num_layers=None):
         self.check_inputs(inputs)
         vectorized_activation = np.vectorize(self.activation_func.eval)
         activations = []
         activation = inputs.T
         activations.append(activation)
         pre_activations = []
-        for bias, weight in zip(self.biases, self.weights):
+        if num_layers != None:
+            index = num_layers
+        else:
+            index = len(self.biases)
+        for bias, weight in zip(self.biases, self.weights)[0:num_layers]:
             with_one = np.insert(activation, 0, 1., axis=0)
             bias_and_weight = np.insert(weight, 0, bias, axis=1)
             pre_activation = bias_and_weight.dot(with_one)
@@ -260,7 +272,6 @@ class NeuralNetwork:
     '''
     def train(self, \
               training, \
-              validation, \
               test, \
               batch_pct, \
               num_per_epoch, \
@@ -281,10 +292,6 @@ class NeuralNetwork:
             pct_correct = self.evaluate(inputs, outputs) * 100.
             print 'Epoch', str(epoch), ':', str(pct_correct), 'correct'
         print 'Training finished at', str(datetime.datetime.now())
-        if validation:
-            vinputs, voutputs = validation
-            pct_correct_validation = self.evaluate(vinputs, voutputs) * 100.
-            print 'Validation:', str(epoch), ':', str(pct_correct_validation), 'correct'
         if test:
             tinputs, toutputs = test
             pct_correct_test = self.evaluate(tinputs, toutputs) * 100.

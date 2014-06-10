@@ -1,10 +1,11 @@
 import numpy as np
 from images import display_image_grid
+from learning import LearningMethod
 from mnist import load_mnist
-from neural_network import LearningMethod, NeuralNetwork, SparsityParams
+from neural_network import NeuralNetwork, SparsityParams
 
 def sparse_autoencoder_mnist():
-    training, validation, test = load_mnist()
+    training, test = load_mnist()
     
     # Because data is between 0 and 1, so don't need to normalize to put into
     # autoencoder.
@@ -33,7 +34,6 @@ def sparse_autoencoder_mnist():
                       sparsity_params=SparsityParams(0.1, 3.) \
                      )
     autoencoder_mnist_network.train([data, data], \
-                                    [], \
                                     [], \
                                     1., \
                                     1, \

@@ -2,7 +2,8 @@ import numpy as np
 import numpy.random as random
 import scipy.io
 from images import display_image_grid, generate_random_image_slice, normalize_image_slices
-from neural_network import LearningMethod, NeuralNetwork, SparsityParams
+from learning import LearningMethod
+from neural_network import NeuralNetwork, SparsityParams
 
 ''' exercise from UFLDL tutorial: use a sparse autoencoder to come up with
     a simplified representation of input images. a good result consists of
@@ -27,13 +28,12 @@ def sparse_autoencoder():
                       sparsity_params=SparsityParams(0.01, 3.) \
                      )
     autoencoder_network.train([normalized_image_slices, normalized_image_slices], \
-                            [], \
-                            [], \
-                            1., \
-                            1, \
-                            1, \
-                            learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}), \
-                           )
+                              [], \
+                              1., \
+                              1, \
+                              1, \
+                              learning_method=LearningMethod('L-BFGS-B', {'max_iter' : 400}), \
+                             )
     weight = autoencoder_network.weights[0]
     display_image_grid(weight, 8, 5)
 
