@@ -1,9 +1,10 @@
 # TODO:
+# -how does autoencoder compare to PCA, as a way to determine essential features?
+# -for self-taught learning, if we include original data along w/auto-encoder
+#  feature, does performance improve?
 # -[low priority] find out why, when we normalize to [0, 1] rather than [0.1, 0.9]
 #  in sparse_autoencoder, we seem to get bad results (though this isn't the case
 #  for the MATLAB implementation)
-# -how does autoencoder compare to PCA, as a way to determine essential features?
-# -also see how bfgs does on mnist
 # -put in pre-commit hook to run numerical gradient check on simple example
 # -profile (maybe look into gpus??)
 # -learn about svm approach to mnist
