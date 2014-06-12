@@ -5,6 +5,12 @@ from mnist import load_mnist
 from neural_network import NeuralNetwork, SparsityParams
 from softmax import Softmax
 
+# accuracy notes (but do note that the supervised training / test are only on
+# a subset of mnist):
+# -train autoencoder, train softmax on feedforward only: 98.7% train, 98.5% test
+# -train autoencoder, train softmax on feedforward + orig: 99.6% train, 98.5% test
+# -no autoencoder, train softmax on orig: 98.3% train, 97.0% test
+
 def self_taught_learning_mnist():
     training, test = load_mnist()
     full_inputs = np.vstack((training[0], test[0]))
@@ -34,11 +40,12 @@ def self_taught_learning_mnist():
     labeled_train_inputs_list, labeled_train_outputs_list = zip(*labeled_train)
     labeled_train_inputs = np.array(labeled_train_inputs_list)
     labeled_train_outputs = np.array(labeled_train_outputs_list)
-    softmax_training_inputs, _, _ = \
+    feedforward_train_inputs, _, _ = \
         autoencoder_mnist_network.feedforward(labeled_train_inputs, 1)
-    softmax = Softmax(10, 196, regularization = 1e-4)
+    softmax = Softmax(10, 196 + 784, regularization = 1e-4)
+    concat_train_inputs = np.hstack((labeled_train_inputs, feedforward_train_inputs.T))
     print 'Training labeled...'
-    softmax.train([softmax_training_inputs.T, labeled_train_outputs], \
+    softmax.train([concat_train_inputs, labeled_train_outputs], \
                   [], \
                   1., \
                   1, \
@@ -48,9 +55,10 @@ def self_taught_learning_mnist():
     labeled_test_inputs_list, labeled_test_outputs_list = zip(*labeled_test)
     labeled_test_inputs = np.array(labeled_test_inputs_list)
     labeled_test_outputs = np.array(labeled_test_outputs_list)
-    softmax_test_inputs, _, _ = \
+    feedforward_test_inputs, _, _ = \
         autoencoder_mnist_network.feedforward(labeled_test_inputs, 1)
-    test_correct = softmax.evaluate(softmax_test_inputs.T, labeled_test_outputs) * 100.
+    concat_test_inputs = np.hstack((labeled_test_inputs, feedforward_test_inputs.T))
+    test_correct = softmax.evaluate(concat_test_inputs, labeled_test_outputs) * 100.
     print 'Test set accuracy:', str(test_correct)
 
 if __name__ == '__main__':
