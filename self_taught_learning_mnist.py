@@ -12,10 +12,8 @@ from softmax import Softmax
 # -no autoencoder, train softmax on orig: 98.3% train, 97.0% test
 
 def self_taught_learning_mnist():
-    training, test = load_mnist()
-    full_inputs = np.vstack((training[0], test[0]))
-    full_outputs = np.vstack((training[1], test[1]))
-    full_data = zip(full_inputs, full_outputs)
+    training, _ = load_mnist()
+    full_data = zip(training[0], training[1])
     unlabeled = np.array([input for input, output in full_data \
                           if sum(output[5:]) == 1.])
     random.seed(1)
