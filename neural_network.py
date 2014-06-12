@@ -31,7 +31,7 @@ from scipy.optimize import fmin_l_bfgs_b
 EPSILON = 1e-10
 
 def sigmoid(x):
-    return 1. / (1. + math.exp(-x))
+    return 1. / (1. + np.exp(-x))
 
 class ActivationFunction:
     def __init__(self, activation_func):
@@ -78,7 +78,6 @@ class NeuralNetwork:
     ''' feed input forward through the network '''
     def feedforward(self, inputs, num_layers=None):
         self.check_inputs(inputs)
-        vectorized_activation = np.vectorize(self.activation_func.eval)
         activations = []
         activation = inputs.T
         activations.append(activation)
@@ -92,7 +91,7 @@ class NeuralNetwork:
             bias_and_weight = np.insert(weight, 0, bias, axis=1)
             pre_activation = bias_and_weight.dot(with_one)
             pre_activations.append(pre_activation)
-            activation = vectorized_activation(pre_activation)
+            activation = self.activation_func.eval(pre_activation)
             activations.append(activation)
         return activation, activations, pre_activations
 
@@ -123,9 +122,8 @@ class NeuralNetwork:
         data_size = float(len(used_inputs))
         (activation, activations, pre_activations), avg_activations = \
             self.do_first_pass(used_inputs)
-        vectorized_activation_deriv = np.vectorize(self.activation_func.deriv)
         pre_activation_derivs = \
-            [vectorized_activation_deriv(pre_activation) \
+            [self.activation_func.deriv(pre_activation) \
                  for pre_activation in pre_activations \
             ]
         cost_pre_activation_deriv = \
