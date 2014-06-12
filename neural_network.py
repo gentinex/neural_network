@@ -6,7 +6,7 @@
 #  in sparse_autoencoder, we seem to get bad results (though this isn't the case
 #  for the MATLAB implementation)
 # -put in pre-commit hook to run numerical gradient check on simple example
-# -profile (maybe look into gpus??)
+# -any performance improvements using gpus?
 # -learn about svm approach to mnist
 # -why does using correlated inputs slow down training time? was this covered in
 #  the coursera course?
