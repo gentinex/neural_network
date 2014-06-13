@@ -26,9 +26,12 @@ class Softmax:
         weight_squared = self.weights[:, 1:] ** 2.
         cost_regularized = np.sum(weight_squared) * self.regularization / 2.
         return cost_standard + cost_regularized
+
+    def unflatten_params(self, unrolled):
+        self.weights = unrolled.reshape(self.weights.shape)
         
-    def cost_unrolled(self, weights, inputs, outputs):
-        self.weights = weights.reshape((outputs.shape[1], inputs.shape[1] + 1))
+    def cost_unrolled(self, unrolled, inputs, outputs):
+        self.unflatten_params(unrolled)
         return self.cost(inputs, outputs)
         
     def cost_deriv(self, inputs, outputs):
@@ -37,8 +40,8 @@ class Softmax:
         cost_deriv_standard = -(probs - outputs.T).dot(with_one.T) / len(inputs)
         return cost_deriv_standard + self.regularization * self.weights
         
-    def cost_deriv_unrolled(self, weights, inputs, outputs):
-        self.weights = weights.reshape((outputs.shape[1], inputs.shape[1] + 1))
+    def cost_deriv_unrolled(self, unrolled, inputs, outputs):
+        self.unflatten_params(unrolled)
         return self.cost_deriv(inputs, outputs).flatten()
 
     def gradient_descent(self, inputs, outputs, learning_rate):
@@ -50,7 +53,7 @@ class Softmax:
         bound_cost = lambda x: self.cost_unrolled(x, inputs, outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, inputs, outputs)
         optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=max_iter)
-        self.weights = optimal_unrolled.reshape((outputs.shape[1], inputs.shape[1] + 1))
+        self.weights = optimal_unrolled.reshape(self.weights.shape)
     
     def evaluate(self, inputs, outputs):
         probs = self.probabilities(inputs)
