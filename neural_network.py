@@ -1,10 +1,9 @@
 # TODO:
 # -how does autoencoder compare to PCA, as a way to determine essential features?
-# -for self-taught learning, if we include original data along w/auto-encoder
-#  feature, does performance improve?
 # -find out why, when we normalize to [0, 1] rather than [0.1, 0.9]
 #  in sparse_autoencoder, we seem to get bad results (though this isn't the case
 #  for the MATLAB implementation??)
+# -look into implementing all of this in Torch
 # -is there a reasonable way to abstract the composition of neural network and
 #  softmax layers into a unified class?
 # -put in pre-commit hook to run numerical gradient check on simple example
@@ -183,7 +182,6 @@ class NeuralNetwork:
         
     ''' numerical derivative of standard cost function - used for validating backpropagation '''
     def cost_deriv(self, inputs, outputs):
-        print 'neural_network_cost_deriv'
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
                          for weight in self.weights \
