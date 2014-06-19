@@ -7,17 +7,20 @@ from scipy.optimize import fmin_l_bfgs_b
     the last layer of the neural network is combined with the neural network
     input to form the input to the softmax layer '''
 class CompositeNetwork:
-    def __init__(self, neural_network, softmax):
+    def __init__(self, neural_network, softmax, concat=True):
         self.neural_network = neural_network
         self.softmax = softmax
+        self.concat = concat
         
     def params(self):
         return self.neural_network.params(), self.softmax.weights
         
     def calc_softmax_inputs(self, inputs):
         activations, _, _ = self.neural_network.feedforward(inputs)
-        concat_inputs = np.hstack((inputs, activations.T))
-        return concat_inputs
+        if self.concat:
+            return np.hstack((inputs, activations.T))
+        else:
+            return activations.T
         
     def feedforward(self, inputs):
         return self.softmax.probabilities(self.calc_softmax_inputs(inputs))
@@ -29,8 +32,11 @@ class CompositeNetwork:
     def cost_deriv(self, inputs, outputs):
         softmax_inputs = self.calc_softmax_inputs(inputs)
         softmax_cost_deriv = self.softmax.cost_deriv(softmax_inputs, outputs)
-        neural_network_output_size = self.neural_network.num_nodes_per_layer[-1]
-        neural_network_outputs = softmax_inputs[:, -neural_network_output_size:]
+        if self.concat:
+            neural_network_output_size = self.neural_network.num_nodes_per_layer[-1]
+            neural_network_outputs = softmax_inputs[:, -neural_network_output_size:]
+        else:
+            neural_network_outputs = softmax_inputs
         neural_network_cost_deriv = \
             self.neural_network.backpropagate(inputs, neural_network_outputs)
         return neural_network_cost_deriv, softmax_cost_deriv
