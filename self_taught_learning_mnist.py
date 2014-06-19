@@ -40,10 +40,17 @@ def self_taught_learning_mnist():
     labeled_train_outputs = np.array(labeled_train_outputs_list)
     feedforward_train_inputs, _, _ = \
         autoencoder_mnist_network.feedforward(labeled_train_inputs, 1)
-    softmax = Softmax(10, 196 + 784, regularization = 1e-4)
-    concat_train_inputs = np.hstack((labeled_train_inputs, feedforward_train_inputs.T))
+
+    concat = True
+    if concat:
+        softmax_train_inputs = np.hstack((labeled_train_inputs, feedforward_train_inputs.T))
+        softmax_input_size = 196 + 784
+    else:
+        softmax_train_inputs = feedforward_train_inputs.T
+        softmax_input_size = 196
+    softmax = Softmax(10, softmax_input_size, regularization = 1e-4)
     print 'Training labeled...'
-    softmax.train([concat_train_inputs, labeled_train_outputs], \
+    softmax.train([softmax_train_inputs, labeled_train_outputs], \
                   [], \
                   1., \
                   1, \
@@ -55,8 +62,11 @@ def self_taught_learning_mnist():
     labeled_test_outputs = np.array(labeled_test_outputs_list)
     feedforward_test_inputs, _, _ = \
         autoencoder_mnist_network.feedforward(labeled_test_inputs, 1)
-    concat_test_inputs = np.hstack((labeled_test_inputs, feedforward_test_inputs.T))
-    test_correct = softmax.evaluate(concat_test_inputs, labeled_test_outputs) * 100.
+    if concat:
+        softmax_test_inputs = np.hstack((labeled_test_inputs, feedforward_test_inputs.T))
+    else:
+        softmax_test_inputs = feedforward_test_inputs.T
+    test_correct = softmax.evaluate(softmax_test_inputs, labeled_test_outputs) * 100.
     print 'Test set accuracy:', str(test_correct)
 
 if __name__ == '__main__':
