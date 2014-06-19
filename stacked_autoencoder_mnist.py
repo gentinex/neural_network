@@ -48,13 +48,21 @@ def stacked_autoencoder_mnist():
     
     encoded_test0, _, _ = autoencoder0.feedforward(test_inputs, 1)
     encoded_test1, _, _ = autoencoder1.feedforward(encoded_test0.T, 1)
-    concat_test_inputs = np.hstack((test_inputs, encoded_test1.T))
+    
+    concat = False
+    if concat:
+        used_test_inputs = np.hstack((test_inputs, encoded_test1.T))
+        used_train_inputs = np.hstack((inputs, encoded1.T))
+        softmax_input_size = 196 + 784
+    else:
+        used_test_inputs = encoded_test1.T
+        used_train_inputs = encoded1.T
+        softmax_input_size = 196
 
-    concat_train_inputs = np.hstack((inputs, encoded1.T))
-    softmax = Softmax(10, 196 + 784, regularization=1e-4)
+    softmax = Softmax(10, softmax_input_size, regularization=1e-4)
     print 'Training softmax classifier...'
-    softmax.train([concat_train_inputs, outputs], \
-                  [concat_test_inputs, test_outputs], \
+    softmax.train([used_train_inputs, outputs], \
+                  [used_test_inputs, test_outputs], \
                   1., \
                   1, \
                   1, \
@@ -71,7 +79,7 @@ def stacked_autoencoder_mnist():
     autoencoder_network.weights[0] = autoencoder0.weights[0]
     autoencoder_network.weights[1] = autoencoder1.weights[0]
     
-    composite_network = CompositeNetwork(autoencoder_network, softmax)
+    composite_network = CompositeNetwork(autoencoder_network, softmax, concat)
     print 'Fine-tuning...'
     composite_network.train([inputs, outputs], \
                             [test_inputs, test_outputs], \
