@@ -3,8 +3,10 @@ import numpy as np
 from learning import LearningMethod, select_data
 from scipy.optimize import fmin_l_bfgs_b
 
+EPSILON = 1e-10
+
 ''' compose a neural network with a softmax classification layer.
-    the last layer of the neural network is combined with the neural network
+    the last layer of the neural network may be combined with the neural network
     input to form the input to the softmax layer '''
 class CompositeNetwork:
     def __init__(self, neural_network, softmax, concat=True):
@@ -29,17 +31,47 @@ class CompositeNetwork:
         activations = self.calc_softmax_inputs(inputs)
         return self.softmax.cost(activations, outputs)
         
-    def cost_deriv(self, inputs, outputs):
+    def backpropagate(self, inputs, outputs):
         softmax_inputs = self.calc_softmax_inputs(inputs)
-        softmax_cost_deriv = self.softmax.cost_deriv(softmax_inputs, outputs)
-        if self.concat:
-            neural_network_output_size = self.neural_network.num_nodes_per_layer[-1]
-            neural_network_outputs = softmax_inputs[:, -neural_network_output_size:]
-        else:
-            neural_network_outputs = softmax_inputs
-        neural_network_cost_deriv = \
-            self.neural_network.backpropagate(inputs, neural_network_outputs)
-        return neural_network_cost_deriv, softmax_cost_deriv
+        softmax_cost_deriv = self.softmax.backpropagate(softmax_inputs, outputs)
+        probs = self.softmax.probabilities(softmax_inputs)
+        neural_network_output_size = self.neural_network.num_nodes_per_layer[-1]
+        used_softmax_weights = self.softmax.weights[:, -neural_network_output_size:]
+        cost_pre_activation_deriv = \
+            -used_softmax_weights.dot(probs.T - outputs) / float(len(inputs))
+        neural_network_derivs = \
+            self.neural_network.backpropagate(inputs, [], cost_pre_activation_deriv)
+        return neural_network_derivs, softmax_cost_deriv
+        
+    ''' numerical derivative - for validating backpropagation '''
+    def cost_deriv(self, inputs, outputs):
+        neural_network_bias_derivs = \
+            [np.zeros(bias.shape) for bias in self.neural_network.biases]
+        neural_network_weight_derivs = \
+            [np.zeros(weight.shape) for weight in self.neural_network.weights]
+        softmax_weight_derivs = \
+            [np.zeros(weight.shape) for weight in self.softmax.weights]
+        base_cost = self.cost(inputs, outputs)
+        for i, bias in enumerate(self.neural_network.biases):
+            for j, _ in enumerate(bias):
+                self.neural_network.biases[i][j] += EPSILON
+                bias_derivs[i][j] = \
+                    (self.cost(inputs, outputs) - base_cost) / EPSILON
+                self.neural_network.biases[i][j] -= EPSILON
+        for i, weight in enumerate(self.neural_network.weights):
+            for j, weight_row in enumerate(weight):
+                for k, _ in enumerate(weight_row):
+                    self.neural_network.weights[i][j][k] += EPSILON
+                    weight_derivs[i][j][k] = \
+                        (self.cost(inputs, outputs) - base_cost) / EPSILON
+                    self.neural_network.weights[i][j][k] -= EPSILON
+        for i, weight in enumerate(self.softmax.weights):
+            for j, weight_row in enumerate(weight):
+                self.softmax.weights[i][j] += EPSILON
+                softmax_weight_derivs = \
+                    (self.cost(inputs, outputs) - base_cost) / EPSILON
+                self.softmax.weights[i][j] -= EPSILON
+        return (neural_network_bias_derivs, neural_network_weight_derivs), softmax_weight_derivs
 
     def unflatten_params(self, unrolled):
         num_total_params = len(unrolled)
@@ -61,7 +93,7 @@ class CompositeNetwork:
         
     def cost_deriv_unrolled(self, unrolled, inputs, outputs):
         self.unflatten_params(unrolled)
-        return self.flatten_params(self.cost_deriv(inputs, outputs))
+        return self.flatten_params(self.backpropagate(inputs, outputs))
     
     def l_bfgs_b(self, inputs, outputs, max_iter):
         unrolled = self.flatten_params(self.params())
