@@ -5,6 +5,8 @@ from learning import LearningMethod, select_data
 from mnist import load_mnist
 from scipy.optimize import fmin_l_bfgs_b
 
+EPSILON = 1e-10
+
 class Softmax:
     def __init__(self, num_labels, num_features, regularization=0.):
         self.weights = random.randn(num_labels, num_features + 1)
@@ -29,23 +31,37 @@ class Softmax:
 
     def unflatten_params(self, unrolled):
         self.weights = unrolled.reshape(self.weights.shape)
-        
+
+    ''' need unrolled cost to pass into L-BFGS-B minimization algorithm '''
     def cost_unrolled(self, unrolled, inputs, outputs):
         self.unflatten_params(unrolled)
         return self.cost(inputs, outputs)
         
-    def cost_deriv(self, inputs, outputs):
+    def backpropagate(self, inputs, outputs):
         with_one = np.insert(inputs.T, 0, 1., axis=0)
         probs = self.probabilities(inputs)
         cost_deriv_standard = -(probs - outputs.T).dot(with_one.T) / len(inputs)
         return cost_deriv_standard + self.regularization * self.weights
         
+    ''' need unrolled cost deriv to pass into L-BFGS-B minimization algorithm '''
     def cost_deriv_unrolled(self, unrolled, inputs, outputs):
         self.unflatten_params(unrolled)
-        return self.cost_deriv(inputs, outputs).flatten()
+        return self.backpropagate(inputs, outputs).flatten()
+        
+    ''' numerical cost deriv to validate backpropagation '''
+    def cost_deriv(self, inputs, outputs):
+        base_cost = self.cost(inputs, outputs)
+        weight_derivs = np.zeros(self.weights.shape)
+        for i, weight in enumerate(self.weights):
+            for j, weight_row in enumerate(weight):
+                self.weights[i][j] += EPSILON
+                weight_derivs[i][j] = \
+                    (self.cost(inputs, outputs) - base_cost) / EPSILON
+                self.weights[i][j] -= EPSILON
+        return weight_derivs
 
     def gradient_descent(self, inputs, outputs, learning_rate):
-        weight_deriv = self.cost_deriv(inputs, outputs)
+        weight_deriv = self.backpropagate(inputs, outputs)
         self.weights = self.weights - learning_rate * weight_deriv
     
     def l_bfgs_b(self, inputs, outputs, max_iter):
