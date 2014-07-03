@@ -11,6 +11,17 @@ from softmax import Softmax
 # -without fine-tuning: 95.3% training, 94.6% test
 # -with fine-tuning: 
 
+def toy_example():
+    # current status: need to get the derivative from softmax to autoencoder working
+    random.seed(1)
+    autoencoder_network = NeuralNetwork([4, 3, 5])
+    softmax = Softmax(2, 5, regularization=0.01)
+    composite_network = CompositeNetwork(autoencoder_network, softmax, False)
+    inputs = random.randn(5, 4)
+    outputs = np.array([[1., 0.], [0., 1.], [1., 0.], [0., 1.], [1., 0.]])
+    print composite_network.backpropagate(inputs, outputs)
+    print composite_network.cost_deriv(inputs, outputs)
+
 def stacked_autoencoder_mnist():
     training, test = load_mnist()
     inputs, outputs = training
@@ -69,10 +80,11 @@ def stacked_autoencoder_mnist():
                   LearningMethod('L-BFGS-B', {'max_iter' : 100})
                  )
                  
-    # no regularization for autoencoder level in composite network (why?)
+    # no regularization or sparsity for autoencoder levels in composite network (why?)
     autoencoder_network = \
         NeuralNetwork([784, 196, 196], \
-                      sparsity_params=SparsityParams(0.1, 3.) \
+                      #sparsity_params=SparsityParams(0.1, 3.) \
+                      #regularization=1e-4 \
                      )
     autoencoder_network.biases[0] = autoencoder0.biases[0]
     autoencoder_network.biases[1] = autoencoder1.biases[0]
@@ -90,4 +102,5 @@ def stacked_autoencoder_mnist():
                            )
                  
 if __name__ == '__main__':
-    stacked_autoencoder_mnist()
+    toy_example()
+#    stacked_autoencoder_mnist()
