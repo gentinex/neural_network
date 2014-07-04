@@ -38,7 +38,7 @@ class CompositeNetwork:
         neural_network_output_size = self.neural_network.num_nodes_per_layer[-1]
         used_softmax_weights = self.softmax.weights[:, -neural_network_output_size:]
         cost_pre_activation_deriv = \
-            -used_softmax_weights.dot(probs.T - outputs) / float(len(inputs))
+            -(probs.T - outputs).dot(used_softmax_weights).T / float(len(inputs))
         neural_network_derivs = \
             self.neural_network.backpropagate(inputs, [], cost_pre_activation_deriv)
         return neural_network_derivs, softmax_cost_deriv
@@ -49,26 +49,25 @@ class CompositeNetwork:
             [np.zeros(bias.shape) for bias in self.neural_network.biases]
         neural_network_weight_derivs = \
             [np.zeros(weight.shape) for weight in self.neural_network.weights]
-        softmax_weight_derivs = \
-            [np.zeros(weight.shape) for weight in self.softmax.weights]
+        softmax_weight_derivs = np.zeros(self.softmax.weights.shape)
         base_cost = self.cost(inputs, outputs)
         for i, bias in enumerate(self.neural_network.biases):
             for j, _ in enumerate(bias):
                 self.neural_network.biases[i][j] += EPSILON
-                bias_derivs[i][j] = \
+                neural_network_bias_derivs[i][j] = \
                     (self.cost(inputs, outputs) - base_cost) / EPSILON
                 self.neural_network.biases[i][j] -= EPSILON
         for i, weight in enumerate(self.neural_network.weights):
             for j, weight_row in enumerate(weight):
                 for k, _ in enumerate(weight_row):
                     self.neural_network.weights[i][j][k] += EPSILON
-                    weight_derivs[i][j][k] = \
+                    neural_network_weight_derivs[i][j][k] = \
                         (self.cost(inputs, outputs) - base_cost) / EPSILON
                     self.neural_network.weights[i][j][k] -= EPSILON
         for i, weight in enumerate(self.softmax.weights):
             for j, weight_row in enumerate(weight):
                 self.softmax.weights[i][j] += EPSILON
-                softmax_weight_derivs = \
+                softmax_weight_derivs[i][j] = \
                     (self.cost(inputs, outputs) - base_cost) / EPSILON
                 self.softmax.weights[i][j] -= EPSILON
         return (neural_network_bias_derivs, neural_network_weight_derivs), softmax_weight_derivs

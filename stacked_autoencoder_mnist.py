@@ -12,7 +12,6 @@ from softmax import Softmax
 # -with fine-tuning: 
 
 def toy_example():
-    # current status: need to get the derivative from softmax to autoencoder working
     random.seed(1)
     autoencoder_network = NeuralNetwork([4, 3, 5])
     softmax = Softmax(2, 5, regularization=0.01)

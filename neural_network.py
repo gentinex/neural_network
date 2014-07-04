@@ -117,7 +117,7 @@ class NeuralNetwork:
         return first_pass, avg_activations
 
     ''' fast calculation of network derivatives with respect to weights / biases '''
-    def backpropagate(self, used_inputs, used_outputs, cost_pre_activation_deriv=None):
+    def backpropagate(self, used_inputs, used_outputs, last_layer_deriv=None):
         bias_derivs = [np.zeros(bias.shape) for bias in self.biases]
         # regularization derivative
         weight_derivs = [self.regularization * copy.deepcopy(weight) \
@@ -130,9 +130,12 @@ class NeuralNetwork:
             [self.activation_func.deriv(pre_activation) \
                  for pre_activation in pre_activations \
             ]
-        if cost_pre_activation_deriv == None:
+        if last_layer_deriv == None:
             cost_pre_activation_deriv = \
                 (activation - used_outputs.T) * pre_activation_derivs[-1] / data_size
+        else:
+            cost_pre_activation_deriv = \
+                last_layer_deriv * pre_activation_derivs[-1]
         cost_pre_activation_derivs = [cost_pre_activation_deriv]
 
         for pre_activation_deriv, weight, avg_activation in \
