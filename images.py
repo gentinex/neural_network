@@ -17,7 +17,7 @@ def generate_random_image_slice(images, height, width):
     return images[image_height:(image_height + height), \
                   image_width:(image_width + width), \
                   image_index \
-                 ].flatten()
+                 ].ravel()
 
 ''' normalize a set of image slices, for use in autoencoder with sigmoid
     activation. this requires input to be between 0 and 1 because the output will

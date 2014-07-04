@@ -16,7 +16,7 @@ class Softmax:
     def probabilities(self, inputs):
         with_one = np.insert(inputs.T, 0, 1., axis=0)
         rel_probs = np.exp(-self.weights.dot(with_one))
-        net_probs = np.tile(np.sum(rel_probs, 0), (rel_probs.shape[0], 1))
+        net_probs = np.sum(rel_probs, 0)
         return rel_probs / net_probs
         
     ''' cost function is defined as negative log-likelihood of the data. thus,
@@ -46,7 +46,7 @@ class Softmax:
     ''' need unrolled cost deriv to pass into L-BFGS-B minimization algorithm '''
     def cost_deriv_unrolled(self, unrolled, inputs, outputs):
         self.unflatten_params(unrolled)
-        return self.backpropagate(inputs, outputs).flatten()
+        return self.backpropagate(inputs, outputs).ravel()
         
     ''' numerical cost deriv to validate backpropagation '''
     def cost_deriv(self, inputs, outputs):
@@ -62,10 +62,10 @@ class Softmax:
 
     def gradient_descent(self, inputs, outputs, learning_rate):
         weight_deriv = self.backpropagate(inputs, outputs)
-        self.weights = self.weights - learning_rate * weight_deriv
+        self.weights -= learning_rate * weight_deriv
     
     def l_bfgs_b(self, inputs, outputs, max_iter):
-        unrolled = self.weights.flatten()
+        unrolled = self.weights.ravel()
         bound_cost = lambda x: self.cost_unrolled(x, inputs, outputs)
         bound_cost_deriv = lambda x: self.cost_deriv_unrolled(x, inputs, outputs)
         optimal_unrolled, _, _ = fmin_l_bfgs_b(bound_cost, unrolled, bound_cost_deriv, maxiter=max_iter)

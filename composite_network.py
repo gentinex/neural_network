@@ -84,7 +84,7 @@ class CompositeNetwork:
     def flatten_params(self, (neural_network_params, softmax_params)):
         neural_network_flattened = \
             self.neural_network.flatten_params(neural_network_params)
-        return np.concatenate((neural_network_flattened, softmax_params.flatten()))
+        return np.concatenate((neural_network_flattened, softmax_params.ravel()))
         
     def cost_unrolled(self, unrolled, inputs, outputs):
         self.unflatten_params(unrolled)

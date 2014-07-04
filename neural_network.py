@@ -1,4 +1,5 @@
 # TODO:
+# -survey of potential performance improvements:
 # -how does autoencoder compare to PCA, as a way to determine essential features?
 # -find out why, when we normalize to [0, 1] rather than [0.1, 0.9]
 #  in sparse_autoencoder, we seem to get bad results (though this isn't the case
@@ -206,7 +207,7 @@ class NeuralNetwork:
         
     ''' flatten weights and biases '''
     def flatten_params(self, (bias_list, weight_list)):
-        unrolled_weights = list(itertools.chain(*[weight.flatten() for weight in weight_list]))
+        unrolled_weights = list(itertools.chain(*[weight.ravel() for weight in weight_list]))
         unrolled_biases = list(itertools.chain(*bias_list))
         return np.array(unrolled_weights + unrolled_biases)
 
@@ -240,14 +241,10 @@ class NeuralNetwork:
     def gradient_descent(self, used_inputs, used_outputs, learning_rate):
         bias_derivs, weight_derivs = \
             self.backpropagate(used_inputs, used_outputs)
-        self.biases = \
-            [bias - learning_rate * bias_deriv \
-                 for bias, bias_deriv in zip(self.biases, bias_derivs) \
-            ]
-        self.weights = \
-            [weight - learning_rate * weight_deriv \
-                for weight, weight_deriv in zip(self.weights, weight_derivs) \
-            ]
+        for bias, bias_deriv in zip(self.biases, bias_derivs):
+            bias -= learning_rate * bias_deriv
+        for weight, weight_deriv in zip(self.weights, weight_derivs):
+            weight -= learning_rate * weight_deriv
     
     def l_bfgs_b(self, used_inputs, used_outputs, max_iter):
         unrolled = self.flatten_params(self.params())
