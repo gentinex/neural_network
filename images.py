@@ -2,9 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import numpy.random as random
 
-def display_image(image, title=''):
+def display_image(image, title='', cmap=''):
     imgplot = plt.imshow(image)
-    imgplot.set_cmap('binary')
+    if cmap:
+        imgplot.set_cmap(cmap)
     plt.title(title)
     plt.show()
 
@@ -29,15 +30,36 @@ def normalize_image_slices(image_slices):
     raw_normalized_image_slices = \
         np.minimum(np.maximum(demeaned_image_slices, -stdev_limit), stdev_limit) / stdev_limit
     return 0.4 * raw_normalized_image_slices + 0.5
-                 
-def display_image_grid(images, image_size, num_images_per_row_col):
+
+def opt_rescale(image, rescale):
+    if not rescale:
+        return image
+    else:
+        max_pixel = np.max(image)
+        return image / max_pixel
+    
+def display_image_grid(images, \
+                       image_size, \
+                       num_images_per_row_col, \
+                       rescale=True, \
+                       rgb=False
+                      ):
+    num_pixels = image_size * image_size
     max_index = image_size * num_images_per_row_col
-    final_image = np.zeros((max_index, max_index))
+    if rgb:
+        final_image = np.zeros((max_index, max_index, 3))
+    else:
+        final_image = np.zeros((max_index, max_index))
     xmin, ymin, xmax, ymax = 0, 0, image_size, image_size
     for image in images:
-        reshaped = np.reshape(image, (image_size, image_size), 'F')
-        max_pixel = np.max(reshaped)
-        final_image[xmin:xmax, ymin:ymax] = reshaped / max_pixel
+        if rgb:
+            for color_index in xrange(3):
+                sub_image = image[(color_index * num_pixels): ((color_index + 1) * num_pixels)]
+                reshaped = opt_rescale(np.reshape(sub_image, (image_size, image_size), 'F'), rescale)
+                final_image[xmin:xmax, ymin:ymax, color_index] = reshaped
+        else:
+            reshaped = opt_rescale(np.reshape(image, (image_size, image_size), 'F'), rescale)
+            final_image[xmin:xmax, ymin:ymax] = reshaped
         if ymax == max_index:
             ymin, ymax = 0, image_size
             xmin = xmin + image_size
