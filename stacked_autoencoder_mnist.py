@@ -8,8 +8,8 @@ from scipy.optimize import fmin_l_bfgs_b
 from softmax import Softmax
 
 # accuracy comments:
-# -without fine-tuning: 95.3% training, 94.6% test
-# -with fine-tuning: 
+# -w/o concatenation: 91.1% train / 91.9% test pre-fine-tuning, 100% / 98.1% post
+# -w/concatenation: 95.3% train / 94.6% test pre-fine-tuning, 100% / 98.32% post
 
 def toy_example():
     random.seed(1)
@@ -59,7 +59,7 @@ def stacked_autoencoder_mnist():
     encoded_test0, _, _ = autoencoder0.feedforward(test_inputs, 1)
     encoded_test1, _, _ = autoencoder1.feedforward(encoded_test0.T, 1)
     
-    concat = False
+    concat = True
     if concat:
         used_test_inputs = np.hstack((test_inputs, encoded_test1.T))
         used_train_inputs = np.hstack((inputs, encoded1.T))
@@ -101,5 +101,4 @@ def stacked_autoencoder_mnist():
                            )
                  
 if __name__ == '__main__':
-    toy_example()
-#    stacked_autoencoder_mnist()
+   stacked_autoencoder_mnist()
