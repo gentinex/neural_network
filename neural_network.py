@@ -61,7 +61,17 @@ class NeuralNetwork:
                 ):
         assert all(num_nodes > 0 for num_nodes in num_nodes_per_layer)
         self.num_nodes_per_layer = num_nodes_per_layer
-        self.activation_func = ActivationFunction(activation_func)
+        try:
+            assert len(activation_func) == len(num_nodes_per_layer) - 1
+            self.activation_func = \
+                [ActivationFunction(func) \
+                     for func, _ in zip(activation_func, num_nodes_per_layer[1:]) \
+                ]
+        except TypeError:
+            self.activation_func = \
+                [ActivationFunction(activation_func) \
+                     for _ in num_nodes_per_layer[1:] \
+                ]
 
         self.regularization = regularization
         self.sparsity_params = sparsity_params
@@ -69,9 +79,9 @@ class NeuralNetwork:
         random.seed(1)
         self.biases = []
         self.weights = []
-        for i, num_nodes in enumerate(self.num_nodes_per_layer[1:]):
+        for i, num_nodes in enumerate(num_nodes_per_layer[1:]):
             self.biases.append(random.randn(num_nodes))
-            self.weights.append(random.randn(num_nodes, self.num_nodes_per_layer[i]))
+            self.weights.append(random.randn(num_nodes, num_nodes_per_layer[i]))
 
     def params(self):
         return self.biases, self.weights
@@ -91,12 +101,11 @@ class NeuralNetwork:
             index = num_layers
         else:
             index = len(self.biases)
-        for bias, weight in zip(self.biases, self.weights)[0:num_layers]:
-            with_one = np.insert(activation, 0, 1., axis=0)
-            bias_and_weight = np.insert(weight, 0, bias, axis=1)
-            pre_activation = bias_and_weight.dot(with_one)
+        for i, (bias, weight) \
+            in enumerate(zip(self.biases, self.weights)[0:num_layers]):
+            pre_activation = bias[:, np.newaxis] + weight.dot(activation)
             pre_activations.append(pre_activation)
-            activation = self.activation_func.eval(pre_activation)
+            activation = self.activation_func[i].eval(pre_activation)
             activations.append(activation)
         return activation, activations, pre_activations
 
@@ -128,8 +137,8 @@ class NeuralNetwork:
         (activation, activations, pre_activations), avg_activations = \
             self.do_first_pass(used_inputs)
         pre_activation_derivs = \
-            [self.activation_func.deriv(pre_activation) \
-                 for pre_activation in pre_activations \
+            [self.activation_func[i].deriv(pre_activation) \
+                 for i, pre_activation in enumerate(pre_activations) \
             ]
         if last_layer_deriv == None:
             cost_pre_activation_deriv = \
