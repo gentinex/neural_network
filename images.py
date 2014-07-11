@@ -35,7 +35,7 @@ def opt_rescale(image, rescale):
     if not rescale:
         return image
     else:
-        max_pixel = np.max(image)
+        max_pixel = np.max(np.abs(image))
         return image / max_pixel
     
 def display_image_grid(images, \
@@ -67,4 +67,7 @@ def display_image_grid(images, \
         else:
             ymin = ymin + image_size
             ymax = ymax + image_size
+    if rescale:
+        final_image -= np.min(final_image)
+        final_image /= np.max(final_image)
     display_image(final_image)
