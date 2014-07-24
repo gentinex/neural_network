@@ -25,7 +25,8 @@ def zca_whiten(patches, regularize=True):
         # patches[i] = patch - np.mean(patch)
 
     # then ensure each pixel is centered around 0
-    patches -= np.mean(patches, 0)
+    mean_patch = np.mean(patches, 0)
+    patches -= mean_patch
 
     pca = PCA().fit(patches)
     if not regularize:
@@ -42,7 +43,7 @@ def zca_whiten(patches, regularize=True):
 
         zca_factor = pca.components_.T.dot(whitening_factor).dot(pca.components_)
     zca_whitened_b = zca_factor.dot(patches.T).T
-    return zca_whitened_b, zca_factor
+    return zca_whitened_b, zca_factor, mean_patch
 
 # notes:
 # -it's important to do ZCA. without this, you'll still get some edges, but
@@ -57,7 +58,7 @@ def zca_whiten(patches, regularize=True):
 def linear_decoder_stl():
     patches = \
         scipy.io.loadmat('../neural_network_ufldl/linear_decoder_exercise/stlSampledPatches.mat')['patches'].T
-    zca_whitened, zca_factor = zca_whiten(patches)
+    zca_whitened, zca_factor, _ = zca_whiten(patches)
         
     identity = lambda x: x
     linear_decoder_network = \
@@ -78,6 +79,11 @@ def linear_decoder_stl():
     with open('../neural_network_ufldl/linear_decoder_exercise/linear_decoder_network.pkl', 'wb') as network_file:
         pickle.dump((linear_decoder_network.biases, linear_decoder_network.weights), \
                      network_file \
+                   )
+
+    with open('../neural_network_ufldl/linear_decoder_exercise/linear_decoder_network_backup.pkl', 'wb') as network_file2:
+        pickle.dump((linear_decoder_network.biases, linear_decoder_network.weights), \
+                     network_file2 \
                    )
 
     weight = linear_decoder_network.weights[0]
