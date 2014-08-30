@@ -3,8 +3,10 @@ import datetime
 import numpy as np
 import numpy.random as random
 import scipy.io
+from images import display_image
 from learning import LearningMethod
 from linear_decoder_stl import zca_whiten
+from neural_network import sigmoid
 from scipy.signal import fftconvolve
 from softmax import Softmax
 
@@ -13,15 +15,16 @@ def convert_to_stl_vector(output):
     vector_output[output] = 1.0
     return vector_output
 
+''' note that we'd run out of memory if we did convolution and pooling separately.
+    ufldl gets around this by doing the convolution and pooling in image batches
+    of size 50 '''
 def convolve_and_pool(images, \
-                      patches, \
                       patch_bias, \
-                      patch_weight, \
                       zca_patch_weight, \
                       zca_mean_patch \
                      ):
+    num_patch_pixels = zca_patch_weight.shape[1] / 3
     num_images = images.shape[3]
-    num_patch_pixels = patches.shape[1] / 3
     patch_dim = int(np.sqrt(num_patch_pixels))
     convolved_dim = num_patch_pixels - patch_dim + 1
     pooling_dim = 19
@@ -32,7 +35,6 @@ def convolve_and_pool(images, \
     for i in xrange(num_images):
         for j, zca_patch_weight_feature in enumerate(zca_patch_weight):
             convolved_features = np.zeros((3, convolved_dim, convolved_dim))
-            bias = patch_bias[j]
             for k in xrange(3):
                 image = images[:, :, k, i]
                 # convolution:
@@ -47,7 +49,7 @@ def convolve_and_pool(images, \
                 convolved = fftconvolve(weight, image)[patch_index:-patch_index, patch_index:-patch_index]
                 # -also, need to zero-center each patch. do this in the
                 #  post-convolution stage
-                convolved_features[k, :, :] = bias + convolved - zca_mean_patch[j]
+                convolved_features[k, :, :] = sigmoid(patch_bias[j] + convolved - zca_mean_patch[j])
             for p in xrange(pooled_dim):
                 for q in xrange(pooled_dim):
                     pooled_features[i, j, p, q] = \
@@ -57,11 +59,45 @@ def convolve_and_pool(images, \
                                                   ] \
                                )
     return pooled_features
-    
+
+''' simple single-image implementation of convolution and pooling, for testing '''
+def convolve_and_pool_test(image, \
+                           patch_bias, \
+                           zca_patch_weight, \
+                           zca_mean_patch \
+                          ):
+    num_patch_pixels = zca_patch_weight.shape[1] / 3
+    patch_dim = int(np.sqrt(num_patch_pixels))
+    convolved_dim = num_patch_pixels - patch_dim + 1
+    convolved_features = np.zeros((3, convolved_dim, convolved_dim))
+    pooling_dim = 19
+    pooled_dim = convolved_dim / pooling_dim
+    pooled_feature = \
+        np.zeros((len(zca_patch_weight), pooled_dim, pooled_dim))
+    for j, zca_patch_weight_feature in enumerate(zca_patch_weight):
+        for k in xrange(3):
+            image_channel = image[:, :, k]
+            image_channel_shape = image_channel.shape
+            weight_raw = \
+                zca_patch_weight_feature[(k * num_patch_pixels):((k + 1) * num_patch_pixels)]
+            weight = np.reshape(weight_raw, (patch_dim, patch_dim), 'F')
+            for p in xrange(convolved_dim):
+                for q in xrange(convolved_dim):
+                    patch = image_channel[p:(p + patch_dim), q:(q + patch_dim), 0]
+                    convolved_features[k, p, q] = sigmoid(patch_bias[j] + np.sum(patch * weight) - zca_mean_patch[j])
+        for p in xrange(pooled_dim):
+            for q in xrange(pooled_dim):
+                pooled_feature[j, p, q] = \
+                    np.mean(convolved_features[:, \
+                                               (p * pooling_dim):((p + 1) * pooling_dim), \
+                                               (q * pooling_dim):((q + 1) * pooling_dim), \
+                                              ] \
+                           )
+    return pooled_feature
+
 # TODO:
 # -get it working!
 # -better understand pooling
-# -visualize train, test images
 # -clean up code some more
 # -what is the sensitivity to the pooling size we use?
 # -what is sensitivity to say max-pooling or other aggregation methods?
@@ -84,14 +120,13 @@ def convolutional_neural_network():
         scipy.io.loadmat('../neural_network_ufldl/cnn_exercise/stlTrainSubset.mat')
     train_images = train['trainImages'] # 64,64,3,2000
     train_labels = train['trainLabels'] # 2000,1
+    
     used_train_labels = \
         np.array([convert_to_stl_vector(output - 1) for output in train_labels])
     print 'pooling training set at', str(datetime.datetime.now())
     pooled_features_train = \
         convolve_and_pool(train_images, \
-                          patches, \
                           patch_bias, \
-                          patch_weight, \
                           zca_patch_weight, \
                           zca_mean_patch \
                          )
@@ -105,9 +140,7 @@ def convolutional_neural_network():
     print 'pooling test set at', str(datetime.datetime.now())
     pooled_features_test = \
         convolve_and_pool(test_images, \
-                          patches, \
                           patch_bias, \
-                          patch_weight, \
                           zca_patch_weight, \
                           zca_mean_patch \
                          )
@@ -129,6 +162,6 @@ def convolutional_neural_network():
                   1, \
                   LearningMethod('L-BFGS-B', {'max_iter' : 200})
                  )
-   
+
 if __name__ == '__main__':
     convolutional_neural_network()
